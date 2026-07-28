@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="900" viewBox="0 0 1240 900" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a5b6c"/>
+    </marker>
+    <style>
+      .title { font-size: 24px; font-weight: 700; fill: #1b2733; }
+      .subtitle { font-size: 13px; fill: #5b6b7c; }
+      .zone { font-size: 12px; font-weight: 700; fill: #7b8794; letter-spacing: .4px; }
+      .svc { font-size: 13.5px; font-weight: 700; fill: #16242f; }
+      .svcsub { font-size: 11px; fill: #6b7885; }
+      .flow { font-size: 11.5px; fill: #4a5b6c; }
+      .note { font-size: 12px; fill: #3c4a58; }
+      .line { stroke: #4a5b6c; stroke-width: 1.6; fill: none; }
+      .dash { stroke: #8b98a5; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+      .card { fill: #ffffff; stroke: #c9d4de; stroke-width: 1.4; }
+    </style>
+  </defs>
+
+  <rect width="1240" height="900" fill="#f6f8fa"/>
+  <text x="40" y="46" class="title">무료 포인트 시스템 — AWS 아키텍처 (가정)</text>
+  <text x="40" y="70" class="subtitle">Multi-AZ 구성. 포인트는 정합성이 최우선이므로 쓰기는 단일 Writer 로 모으고, 사용자 단위 락으로 직렬화한다.</text>
+
+  <!-- Region -->
+  <rect x="40" y="92" width="1160" height="640" rx="10" fill="none" stroke="#b0bcc8" stroke-width="1.6" stroke-dasharray="8 5"/>
+  <text x="56" y="116" class="zone">AWS REGION (ap-northeast-2)</text>
+
+  <!-- edge -->
+  <g>
+    <rect x="70" y="140" width="180" height="72" rx="8" class="card"/>
+    <text x="86" y="172" class="svc">Route 53</text>
+    <text x="86" y="190" class="svcsub">DNS / 헬스체크</text>
+
+    <rect x="70" y="238" width="180" height="72" rx="8" class="card"/>
+    <text x="86" y="270" class="svc">CloudFront + WAF</text>
+    <text x="86" y="288" class="svcsub">Rate limit, 봇 차단</text>
+
+    <rect x="70" y="336" width="180" height="72" rx="8" class="card"/>
+    <text x="86" y="368" class="svc">API Gateway / ALB</text>
+    <text x="86" y="386" class="svcsub">내부 인증 · 라우팅</text>
+  </g>
+
+  <!-- VPC -->
+  <rect x="290" y="140" width="620" height="480" rx="10" fill="#eef4f8" stroke="#9db4c6" stroke-width="1.5"/>
+  <text x="306" y="164" class="zone">VPC — PRIVATE SUBNET (AZ-a / AZ-c)</text>
+
+  <!-- app -->
+  <g>
+    <rect x="320" y="186" width="250" height="120" rx="8" class="card"/>
+    <text x="336" y="214" class="svc">EKS — point-api</text>
+    <text x="336" y="232" class="svcsub">Spring Boot 3 / Java 21</text>
+    <text x="336" y="250" class="svcsub">HPA (CPU · RPS 기준)</text>
+    <text x="336" y="268" class="svcsub">적립 / 적립취소 / 사용 / 사용취소</text>
+    <text x="336" y="290" class="svcsub">stateless — 세션 없음</text>
+  </g>
+
+  <g>
+    <rect x="610" y="186" width="270" height="120" rx="8" class="card"/>
+    <text x="626" y="214" class="svc">EKS CronJob — point-batch</text>
+    <text x="626" y="232" class="svcsub">만료 전이 배치 (청크 단위 트랜잭션)</text>
+    <text x="626" y="250" class="svcsub">만료 예정 알림 대상 추출</text>
+    <text x="626" y="268" class="svcsub">일 1회 04:00 KST</text>
+    <text x="626" y="290" class="svcsub">단일 실행 보장 (leader lock)</text>
+  </g>
+
+  <!-- data layer -->
+  <g>
+    <rect x="320" y="340" width="250" height="132" rx="8" class="card"/>
+    <text x="336" y="368" class="svc">Aurora MySQL — Writer</text>
+    <text x="336" y="386" class="svcsub">모든 쓰기 · 잔액 계산 조회</text>
+    <text x="336" y="404" class="svcsub">SELECT ... FOR UPDATE 직렬화</text>
+    <text x="336" y="422" class="svcsub">Multi-AZ 자동 페일오버</text>
+    <text x="336" y="446" class="svcsub">point_transaction / point_lot /</text>
+    <text x="336" y="462" class="svcsub">point_lot_usage(_cancel)</text>
+  </g>
+
+  <g>
+    <rect x="610" y="340" width="270" height="132" rx="8" class="card"/>
+    <text x="626" y="368" class="svc">Aurora MySQL — Reader</text>
+    <text x="626" y="386" class="svcsub">거래 이력 · 주문별 사용 추적 조회</text>
+    <text x="626" y="404" class="svcsub">복제 지연 허용 가능한 읽기만</text>
+    <text x="626" y="428" class="svc">ElastiCache (Redis)</text>
+    <text x="626" y="446" class="svcsub">정책값 캐시 (TTL 짧게)</text>
+    <text x="626" y="462" class="svcsub">잔액 캐시는 두지 않는다</text>
+  </g>
+
+  <!-- events -->
+  <g>
+    <rect x="320" y="500" width="560" height="98" rx="8" class="card"/>
+    <text x="336" y="528" class="svc">EventBridge → SQS → Lambda</text>
+    <text x="336" y="548" class="svcsub">포인트 적립/사용/만료 이벤트 발행 (알림, 정산, 데이터 파이프라인)</text>
+    <text x="336" y="568" class="svcsub">DLQ 로 실패 이벤트 격리 · 포인트 트랜잭션과 분리해 장애 전파 차단</text>
+    <text x="336" y="588" class="svcsub">주문 시스템은 동기 API 로 사용/사용취소를 호출한다 (결제 흐름상 즉시 응답 필요)</text>
+  </g>
+
+  <!-- ops -->
+  <g>
+    <rect x="950" y="186" width="220" height="120" rx="8" class="card"/>
+    <text x="966" y="214" class="svc">관측</text>
+    <text x="966" y="234" class="svcsub">CloudWatch Logs / Metrics</text>
+    <text x="966" y="252" class="svcsub">X-Ray 분산 추적</text>
+    <text x="966" y="270" class="svcsub">잔액 정합성 알람</text>
+    <text x="966" y="292" class="svcsub">락 대기 시간 · 배치 지연 알람</text>
+
+    <rect x="950" y="340" width="220" height="132" rx="8" class="card"/>
+    <text x="966" y="368" class="svc">보안 / 운영</text>
+    <text x="966" y="388" class="svcsub">Secrets Manager (DB 자격증명)</text>
+    <text x="966" y="406" class="svcsub">IAM Role for Service Account</text>
+    <text x="966" y="424" class="svcsub">KMS 암호화 (저장 · 전송)</text>
+    <text x="966" y="442" class="svcsub">관리자 API 는 내부망 + 감사로그</text>
+    <text x="966" y="462" class="svcsub">S3 + Athena 감사 아카이브</text>
+  </g>
+
+  <!-- flows -->
+  <path d="M160 212 L160 238" class="line" marker-end="url(#a)"/>
+  <path d="M160 310 L160 336" class="line" marker-end="url(#a)"/>
+  <path d="M250 372 L285 372 L285 246 L320 246" class="line" marker-end="url(#a)"/>
+  <text x="256" y="238" class="flow">HTTPS</text>
+
+  <path d="M445 306 L445 340" class="line" marker-end="url(#a)"/>
+  <text x="452" y="328" class="flow">쓰기 · 잔액계산</text>
+
+  <path d="M570 266 L610 266" class="dash"/>
+  <path d="M570 246 L590 246 L590 380 L610 380" class="dash" marker-end="url(#a)"/>
+  <text x="576" y="360" class="flow">조회</text>
+
+  <path d="M745 306 L745 340" class="line" marker-end="url(#a)"/>
+  <text x="752" y="328" class="flow">만료 전이</text>
+
+  <path d="M445 472 L445 500" class="dash" marker-end="url(#a)"/>
+  <path d="M745 472 L745 500" class="dash" marker-end="url(#a)"/>
+
+  <path d="M910 246 L950 246" class="dash" marker-end="url(#a)"/>
+  <path d="M910 400 L950 400" class="dash" marker-end="url(#a)"/>
+
+  <!-- notes -->
+  <g transform="translate(40, 752)">
+    <rect x="0" y="0" width="1160" height="120" rx="8" fill="#ffffff" stroke="#c9d4de" stroke-width="1.2"/>
+    <text x="20" y="28" class="note" font-weight="700">설계 근거</text>
+    <text x="20" y="52" class="note">· 쓰기를 Writer 한 곳으로 모으고 사용자 단위 비관적 락으로 직렬화한다. 포인트는 정합성 &gt; 처리량이며, 사용자 단위 락은 서로 다른 사용자 간 경합을 만들지 않아 수평 확장에 지장이 없다.</text>
+    <text x="20" y="76" class="note">· 잔액은 캐시하지 않는다. Redis 에는 변경 빈도가 낮은 정책값만 올린다. 잔액을 캐시하면 만료 배치·사용취소 재적립 시점에 캐시-원장 불일치가 금전 사고로 이어진다.</text>
+    <text x="20" y="100" class="note">· 이력 조회는 Reader 로 분리한다. 트래픽이 더 커지면 point_transaction 을 user_id 기준으로 샤딩하거나, 오래된 이력을 S3 + Athena 로 아카이빙한다.</text>
+  </g>
+</svg>

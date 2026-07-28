@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: free-point-system
+  datasource:
+    url: jdbc:h2:mem:point;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+
+point:
+  policy:
+    min-earn-amount: 1
+    max-earn-amount: 100000
+    max-user-balance: 1000000
+    default-expire-days: 365
+    min-expire-days: 1
+    max-expire-days: 1824
+  expiration:
+    enabled: true
+    cron: "0 0 4 * * *"
+    chunk-size: 500
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+logging:
+  level:
+    com.musinsa.payments.point: DEBUG
