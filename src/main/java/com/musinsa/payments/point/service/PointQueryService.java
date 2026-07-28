@@ -7,13 +7,11 @@ import com.musinsa.payments.point.domain.PointTransaction;
 import com.musinsa.payments.point.repository.PointLotRepository;
 import com.musinsa.payments.point.repository.PointLotUsageRepository;
 import com.musinsa.payments.point.repository.PointTransactionRepository;
-import com.musinsa.payments.point.service.dto.PointResults;
-import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
+import com.musinsa.payments.point.service.dto.BalanceResult;
+import com.musinsa.payments.point.service.dto.LotBalance;
+import com.musinsa.payments.point.service.dto.OrderUsageDetail;
+import com.musinsa.payments.point.service.dto.OrderUsageResult;
+import com.musinsa.payments.point.service.dto.TransactionResult;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -21,6 +19,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -32,14 +35,14 @@ public class PointQueryService {
     private final PointLotUsageRepository lotUsageRepository;
     private final Clock clock;
 
-    public PointResults.Balance getBalance(Long userId) {
+    public BalanceResult getBalance(Long userId) {
         LocalDateTime now = LocalDateTime.now(clock);
         List<PointLot> lots = lotRepository.findByUserIdOrderByIdAsc(userId);
         Map<Long, String> pointKeys = pointKeysOf(lots);
 
         long balance = 0;
         long manualBalance = 0;
-        List<PointResults.Lot> lotResults = new ArrayList<>();
+        List<LotBalance> lotResults = new ArrayList<>();
         for (PointLot lot : lots) {
             boolean available = lot.isUsableAt(now);
             if (available) {
@@ -48,7 +51,7 @@ public class PointQueryService {
                     manualBalance += lot.getRemainingAmount();
                 }
             }
-            lotResults.add(new PointResults.Lot(
+            lotResults.add(new LotBalance(
                     pointKeys.get(lot.getTransactionId()),
                     lot.getOriginalAmount(),
                     lot.getRemainingAmount(),
@@ -56,12 +59,12 @@ public class PointQueryService {
                     displayStatus(lot, now),
                     lot.getExpireAt()));
         }
-        return new PointResults.Balance(userId, balance, manualBalance, lotResults);
+        return new BalanceResult(userId, balance, manualBalance, lotResults);
     }
 
-    public Page<PointResults.Transaction> getTransactions(Long userId, Pageable pageable) {
+    public Page<TransactionResult> getTransactions(Long userId, Pageable pageable) {
         return transactionRepository.findByUserIdOrderByIdDesc(userId, pageable)
-                .map(transaction -> new PointResults.Transaction(
+                .map(transaction -> new TransactionResult(
                         transaction.getPointKey(),
                         transaction.getType().name(),
                         transaction.getAmount(),
@@ -70,7 +73,7 @@ public class PointQueryService {
                         transaction.getCreatedAt()));
     }
 
-    public PointResults.OrderUsage getOrderUsage(String orderId) {
+    public OrderUsageResult getOrderUsage(String orderId) {
         List<PointLotUsage> usages = lotUsageRepository.findByOrderIdOrderByIdAsc(orderId);
         Map<Long, PointLot> lots = lotRepository.findAllById(
                         usages.stream().map(PointLotUsage::getLotId).distinct().toList())
@@ -82,10 +85,10 @@ public class PointQueryService {
                 .collect(Collectors.toMap(PointTransaction::getId, PointTransaction::getPointKey));
         Map<Long, String> earnPointKeys = pointKeysOf(lots.values());
 
-        List<PointResults.OrderUsageDetail> details = usages.stream()
+        List<OrderUsageDetail> details = usages.stream()
                 .map(usage -> {
                     PointLot lot = lots.get(usage.getLotId());
-                    return new PointResults.OrderUsageDetail(
+                    return new OrderUsageDetail(
                             usePointKeys.get(usage.getUseTransactionId()),
                             earnPointKeys.get(lot.getTransactionId()),
                             usage.getAmount(),
@@ -97,7 +100,7 @@ public class PointQueryService {
 
         long usedAmount = usages.stream().mapToLong(PointLotUsage::getAmount).sum();
         long canceledAmount = usages.stream().mapToLong(PointLotUsage::getCanceledAmount).sum();
-        return new PointResults.OrderUsage(orderId, usedAmount, canceledAmount, details);
+        return new OrderUsageResult(orderId, usedAmount, canceledAmount, details);
     }
 
     private Map<Long, String> pointKeysOf(Iterable<PointLot> lots) {

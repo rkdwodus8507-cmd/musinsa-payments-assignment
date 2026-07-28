@@ -6,16 +6,16 @@ import com.musinsa.payments.point.domain.PointPolicy;
 import com.musinsa.payments.point.domain.PointTransaction;
 import com.musinsa.payments.point.repository.PointLotRepository;
 import com.musinsa.payments.point.repository.PointTransactionRepository;
-import com.musinsa.payments.point.service.dto.PointCommands;
-import com.musinsa.payments.point.service.dto.PointResults;
+import com.musinsa.payments.point.service.dto.EarnCancelResult;
+import com.musinsa.payments.point.service.dto.EarnCommand;
+import com.musinsa.payments.point.service.dto.EarnResult;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +28,7 @@ public class PointEarnService {
     private final Clock clock;
 
     @Transactional
-    public PointResults.Earn earn(PointCommands.Earn command) {
+    public EarnResult earn(EarnCommand command) {
         LocalDateTime now = LocalDateTime.now(clock);
         PointPolicy policy = policyService.getPolicy();
         policy.validateEarnAmount(command.amount());
@@ -49,7 +49,7 @@ public class PointEarnService {
                 now.plusDays(expireDays),
                 now));
 
-        return new PointResults.Earn(
+        return new EarnResult(
                 transaction.getPointKey(),
                 command.userId(),
                 command.amount(),
@@ -59,7 +59,7 @@ public class PointEarnService {
     }
 
     @Transactional
-    public PointResults.EarnCancel cancelEarn(String pointKey) {
+    public EarnCancelResult cancelEarn(String pointKey) {
         LocalDateTime now = LocalDateTime.now(clock);
         PointTransaction earnTransaction = transactionRepository.findByPointKey(pointKey)
                 .orElseThrow(() -> PointException.of(ErrorCode.TRANSACTION_NOT_FOUND, "pointKey=" + pointKey));
@@ -77,7 +77,7 @@ public class PointEarnService {
         PointTransaction cancelTransaction = transactionRepository.save(
                 PointTransaction.earnCancel(earnTransaction.getUserId(), canceledAmount, earnTransaction.getId(), now));
 
-        return new PointResults.EarnCancel(
+        return new EarnCancelResult(
                 cancelTransaction.getPointKey(),
                 earnTransaction.getPointKey(),
                 earnTransaction.getUserId(),

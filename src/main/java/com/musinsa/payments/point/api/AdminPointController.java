@@ -1,12 +1,16 @@
 package com.musinsa.payments.point.api;
 
-import com.musinsa.payments.point.api.dto.PointRequests;
+import com.musinsa.payments.point.api.dto.EarnRequest;
+import com.musinsa.payments.point.api.dto.UpdatePolicyRequest;
 import com.musinsa.payments.point.config.PointExpirationProperties;
 import com.musinsa.payments.point.service.PointEarnService;
 import com.musinsa.payments.point.service.PointExpirationService;
 import com.musinsa.payments.point.service.PointPolicyService;
-import com.musinsa.payments.point.service.dto.PointCommands;
-import com.musinsa.payments.point.service.dto.PointResults;
+import com.musinsa.payments.point.service.dto.EarnCommand;
+import com.musinsa.payments.point.service.dto.EarnResult;
+import com.musinsa.payments.point.service.dto.ExpirationResult;
+import com.musinsa.payments.point.service.dto.PolicyResult;
+import com.musinsa.payments.point.service.dto.UpdatePolicyCommand;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -31,21 +35,21 @@ public class AdminPointController {
 
     @Operation(summary = "관리자 수기 적립", description = "수기지급 포인트는 사용 시 우선 차감된다.")
     @PostMapping("/earn")
-    public PointResults.Earn manualEarn(@Valid @RequestBody PointRequests.Earn request) {
-        return earnService.earn(PointCommands.Earn.ofAdmin(
+    public EarnResult manualEarn(@Valid @RequestBody EarnRequest request) {
+        return earnService.earn(EarnCommand.ofAdmin(
                 request.userId(), request.amount(), request.expireDays(), request.memo()));
     }
 
     @Operation(summary = "포인트 정책 조회")
     @GetMapping("/policies")
-    public PointResults.Policy getPolicy() {
+    public PolicyResult getPolicy() {
         return policyService.findPolicy();
     }
 
     @Operation(summary = "포인트 정책 변경", description = "1회 최대 적립금액, 개인 최대 보유금액, 만료일 범위를 무중단으로 변경한다.")
     @PutMapping("/policies")
-    public PointResults.Policy updatePolicy(@Valid @RequestBody PointRequests.UpdatePolicy request) {
-        return policyService.updatePolicy(new PointCommands.UpdatePolicy(
+    public PolicyResult updatePolicy(@Valid @RequestBody UpdatePolicyRequest request) {
+        return policyService.updatePolicy(new UpdatePolicyCommand(
                 request.minEarnAmount(),
                 request.maxEarnAmount(),
                 request.maxUserBalance(),
@@ -56,7 +60,7 @@ public class AdminPointController {
 
     @Operation(summary = "만료 배치 수동 실행")
     @PostMapping("/expirations")
-    public PointResults.Expiration expire() {
+    public ExpirationResult expire() {
         return expirationService.expireAll(expirationProperties.chunkSize());
     }
 }

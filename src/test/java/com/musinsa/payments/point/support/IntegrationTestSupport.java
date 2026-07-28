@@ -11,8 +11,10 @@ import com.musinsa.payments.point.service.PointExpirationService;
 import com.musinsa.payments.point.service.PointPolicyService;
 import com.musinsa.payments.point.service.PointQueryService;
 import com.musinsa.payments.point.service.PointUseService;
-import com.musinsa.payments.point.service.dto.PointCommands;
-import com.musinsa.payments.point.service.dto.PointResults;
+import com.musinsa.payments.point.service.dto.EarnCommand;
+import com.musinsa.payments.point.service.dto.EarnResult;
+import com.musinsa.payments.point.service.dto.UseCommand;
+import com.musinsa.payments.point.service.dto.UseResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -72,16 +74,16 @@ public abstract class IntegrationTestSupport {
         policyService.initializeIfAbsent();
     }
 
-    protected PointResults.Earn earn(long amount, Integer expireDays) {
-        return earnService.earn(PointCommands.Earn.ofUser(USER_ID, amount, expireDays, null));
+    protected EarnResult earn(long amount, Integer expireDays) {
+        return earnService.earn(EarnCommand.ofUser(USER_ID, amount, expireDays, null));
     }
 
-    protected PointResults.Earn manualEarn(long amount, Integer expireDays) {
-        return earnService.earn(PointCommands.Earn.ofAdmin(USER_ID, amount, expireDays, "수기지급"));
+    protected EarnResult manualEarn(long amount, Integer expireDays) {
+        return earnService.earn(EarnCommand.ofAdmin(USER_ID, amount, expireDays, "수기지급"));
     }
 
-    protected PointResults.Use use(String orderId, long amount) {
-        return useService.use(new PointCommands.Use(USER_ID, orderId, amount));
+    protected UseResult use(String orderId, long amount) {
+        return useService.use(new UseCommand(USER_ID, orderId, amount));
     }
 
     protected long balanceOf(long userId) {

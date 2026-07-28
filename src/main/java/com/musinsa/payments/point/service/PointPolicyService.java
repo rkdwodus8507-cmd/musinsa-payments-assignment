@@ -3,16 +3,15 @@ package com.musinsa.payments.point.service;
 import com.musinsa.payments.point.config.PointPolicyProperties;
 import com.musinsa.payments.point.domain.PointPolicy;
 import com.musinsa.payments.point.repository.PointPolicyRepository;
-import com.musinsa.payments.point.service.dto.PointCommands;
-import com.musinsa.payments.point.service.dto.PointResults;
+import com.musinsa.payments.point.service.dto.PolicyResult;
+import com.musinsa.payments.point.service.dto.UpdatePolicyCommand;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.Clock;
-import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -29,12 +28,12 @@ public class PointPolicyService {
     }
 
     @Transactional(readOnly = true)
-    public PointResults.Policy findPolicy() {
+    public PolicyResult findPolicy() {
         return toResult(getPolicy());
     }
 
     @Transactional
-    public PointResults.Policy updatePolicy(PointCommands.UpdatePolicy command) {
+    public PolicyResult updatePolicy(UpdatePolicyCommand command) {
         PointPolicy policy = getPolicy();
         policy.update(
                 command.minEarnAmount(),
@@ -62,8 +61,8 @@ public class PointPolicyService {
                 LocalDateTime.now(clock)));
     }
 
-    private PointResults.Policy toResult(PointPolicy policy) {
-        return new PointResults.Policy(
+    private PolicyResult toResult(PointPolicy policy) {
+        return new PolicyResult(
                 policy.getMinEarnAmount(),
                 policy.getMaxEarnAmount(),
                 policy.getMaxUserBalance(),

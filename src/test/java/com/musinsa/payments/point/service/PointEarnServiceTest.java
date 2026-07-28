@@ -1,8 +1,12 @@
 package com.musinsa.payments.point.service;
 
 import com.musinsa.payments.point.domain.PointLotStatus;
-import com.musinsa.payments.point.service.dto.PointCommands;
-import com.musinsa.payments.point.service.dto.PointResults;
+import com.musinsa.payments.point.service.dto.BalanceResult;
+import com.musinsa.payments.point.service.dto.EarnCancelResult;
+import com.musinsa.payments.point.service.dto.EarnCommand;
+import com.musinsa.payments.point.service.dto.EarnResult;
+import com.musinsa.payments.point.service.dto.LotBalance;
+import com.musinsa.payments.point.service.dto.UseResult;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import com.musinsa.payments.point.support.MutableClock;
 import com.musinsa.payments.point.support.error.ErrorCode;
@@ -21,7 +25,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("만료일을 지정하지 않으면 정책 기본값 365일이 적용된다")
     void defaultExpireDays() {
-        PointResults.Earn result = earn(1000, null);
+        EarnResult result = earn(1000, null);
 
         assertThat(result.expireAt()).isEqualTo(MutableClock.INITIAL_TIME.plusDays(365));
         assertThat(result.manual()).isFalse();
@@ -70,29 +74,29 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("수기지급 포인트는 일반 적립과 구분되어 식별된다")
     void manualEarnIsDistinguishable() {
-        PointResults.Earn manual = manualEarn(1000, null);
-        PointResults.Earn normal = earn(1000, null);
+        EarnResult manual = manualEarn(1000, null);
+        EarnResult normal = earn(1000, null);
 
-        PointResults.Balance balance = queryService.getBalance(USER_ID);
+        BalanceResult balance = queryService.getBalance(USER_ID);
 
         assertThat(balance.manualBalance()).isEqualTo(1000);
         assertThat(balance.balance()).isEqualTo(2000);
         assertThat(balance.lots())
-                .filteredOn(PointResults.Lot::manual)
-                .extracting(PointResults.Lot::earnPointKey)
+                .filteredOn(LotBalance::manual)
+                .extracting(LotBalance::earnPointKey)
                 .containsExactly(manual.pointKey());
         assertThat(balance.lots())
                 .filteredOn(lot -> !lot.manual())
-                .extracting(PointResults.Lot::earnPointKey)
+                .extracting(LotBalance::earnPointKey)
                 .containsExactly(normal.pointKey());
     }
 
     @Test
     @DisplayName("사용되지 않은 적립은 전액 취소된다")
     void cancelUnusedEarn() {
-        PointResults.Earn earn = earn(1000, null);
+        EarnResult earn = earn(1000, null);
 
-        PointResults.EarnCancel result = earnService.cancelEarn(earn.pointKey());
+        EarnCancelResult result = earnService.cancelEarn(earn.pointKey());
 
         assertThat(result.amount()).isEqualTo(1000);
         assertThat(result.balance()).isZero();
@@ -103,7 +107,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("일부가 사용된 적립은 취소할 수 없다")
     void cannotCancelPartiallyUsedEarn() {
-        PointResults.Earn earn = earn(1000, null);
+        EarnResult earn = earn(1000, null);
         use("ORDER-1", 100);
 
         assertErrorCode(() -> earnService.cancelEarn(earn.pointKey()), ErrorCode.EARN_PARTIALLY_USED);
@@ -112,7 +116,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("이미 취소된 적립은 다시 취소할 수 없다")
     void cannotCancelTwice() {
-        PointResults.Earn earn = earn(1000, null);
+        EarnResult earn = earn(1000, null);
         earnService.cancelEarn(earn.pointKey());
 
         assertErrorCode(() -> earnService.cancelEarn(earn.pointKey()), ErrorCode.EARN_ALREADY_CANCELED);
@@ -121,7 +125,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("만료된 적립은 취소할 수 없다")
     void cannotCancelExpiredEarn() {
-        PointResults.Earn earn = earn(1000, 1);
+        EarnResult earn = earn(1000, 1);
         clock.plusDays(2);
 
         assertErrorCode(() -> earnService.cancelEarn(earn.pointKey()), ErrorCode.EARN_ALREADY_EXPIRED);
@@ -131,7 +135,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     @DisplayName("사용 거래는 적립취소 대상이 아니다")
     void cannotCancelEarnWithUseTransaction() {
         earn(1000, null);
-        PointResults.Use use = use("ORDER-1", 100);
+        UseResult use = use("ORDER-1", 100);
 
         assertErrorCode(() -> earnService.cancelEarn(use.pointKey()), ErrorCode.NOT_EARN_TRANSACTION);
     }
@@ -146,7 +150,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     @DisplayName("사용자별로 잔액이 분리된다")
     void balanceIsolatedPerUser() {
         earn(1000, null);
-        earnService.earn(PointCommands.Earn.ofUser(2L, 500, null, null));
+        earnService.earn(EarnCommand.ofUser(2L, 500, null, null));
 
         assertThat(balanceOf(USER_ID)).isEqualTo(1000);
         assertThat(balanceOf(2L)).isEqualTo(500);

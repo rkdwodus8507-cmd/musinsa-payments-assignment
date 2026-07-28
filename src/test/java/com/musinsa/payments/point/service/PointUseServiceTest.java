@@ -1,6 +1,11 @@
 package com.musinsa.payments.point.service;
 
-import com.musinsa.payments.point.service.dto.PointResults;
+import com.musinsa.payments.point.service.dto.BalanceResult;
+import com.musinsa.payments.point.service.dto.CanceledLot;
+import com.musinsa.payments.point.service.dto.EarnResult;
+import com.musinsa.payments.point.service.dto.UseCancelResult;
+import com.musinsa.payments.point.service.dto.UseResult;
+import com.musinsa.payments.point.service.dto.UsedLot;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
@@ -19,13 +24,13 @@ class PointUseServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("수기지급 포인트가 만료일과 무관하게 먼저 사용된다")
     void manualPointIsUsedFirst() {
-        PointResults.Earn normalSoon = earn(1000, 10);
-        PointResults.Earn manualLater = manualEarn(500, 300);
+        EarnResult normalSoon = earn(1000, 10);
+        EarnResult manualLater = manualEarn(500, 300);
 
-        PointResults.Use use = use(ORDER_ID, 700);
+        UseResult use = use(ORDER_ID, 700);
 
         assertThat(use.details())
-                .extracting(PointResults.UsedLot::earnPointKey, PointResults.UsedLot::amount)
+                .extracting(UsedLot::earnPointKey, UsedLot::amount)
                 .containsExactly(
                         tuple(manualLater.pointKey(), 500L),
                         tuple(normalSoon.pointKey(), 200L));
@@ -34,13 +39,13 @@ class PointUseServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("수기지급끼리는 만료일이 짧게 남은 순서로 사용된다")
     void manualPointsFollowExpiryOrder() {
-        PointResults.Earn later = manualEarn(300, 100);
-        PointResults.Earn sooner = manualEarn(300, 10);
+        EarnResult later = manualEarn(300, 100);
+        EarnResult sooner = manualEarn(300, 10);
 
-        PointResults.Use use = use(ORDER_ID, 400);
+        UseResult use = use(ORDER_ID, 400);
 
         assertThat(use.details())
-                .extracting(PointResults.UsedLot::earnPointKey, PointResults.UsedLot::amount)
+                .extracting(UsedLot::earnPointKey, UsedLot::amount)
                 .containsExactly(
                         tuple(sooner.pointKey(), 300L),
                         tuple(later.pointKey(), 100L));
@@ -49,14 +54,14 @@ class PointUseServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("일반 적립은 만료일이 짧게 남은 순서로 사용된다")
     void normalPointsFollowExpiryOrder() {
-        PointResults.Earn later = earn(300, 200);
-        PointResults.Earn sooner = earn(300, 20);
-        PointResults.Earn middle = earn(300, 50);
+        EarnResult later = earn(300, 200);
+        EarnResult sooner = earn(300, 20);
+        EarnResult middle = earn(300, 50);
 
-        PointResults.Use use = use(ORDER_ID, 750);
+        UseResult use = use(ORDER_ID, 750);
 
         assertThat(use.details())
-                .extracting(PointResults.UsedLot::earnPointKey, PointResults.UsedLot::amount)
+                .extracting(UsedLot::earnPointKey, UsedLot::amount)
                 .containsExactly(
                         tuple(sooner.pointKey(), 300L),
                         tuple(middle.pointKey(), 300L),
@@ -73,7 +78,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         assertThat(balanceOf(USER_ID)).isEqualTo(500);
         assertErrorCode(() -> use(ORDER_ID, 600), ErrorCode.INSUFFICIENT_BALANCE);
 
-        PointResults.Use use = use(ORDER_ID, 500);
+        UseResult use = use(ORDER_ID, 500);
         assertThat(use.details()).hasSize(1);
     }
 
@@ -89,18 +94,18 @@ class PointUseServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("전액 사용취소하면 원 적립분이 그대로 복원된다")
     void fullCancelRestoresOriginalLots() {
-        PointResults.Earn a = earn(1000, 10);
-        PointResults.Earn b = earn(500, 365);
-        PointResults.Use use = use(ORDER_ID, 1200);
+        EarnResult a = earn(1000, 10);
+        EarnResult b = earn(500, 365);
+        UseResult use = use(ORDER_ID, 1200);
 
-        PointResults.UseCancel cancel = useService.cancelUse(use.pointKey(), 1200);
+        UseCancelResult cancel = useService.cancelUse(use.pointKey(), 1200);
 
         assertThat(cancel.balance()).isEqualTo(1500);
         assertThat(cancel.remainingCancelableAmount()).isZero();
         assertThat(cancel.details())
-                .extracting(PointResults.CanceledLot::earnPointKey,
-                        PointResults.CanceledLot::amount,
-                        PointResults.CanceledLot::reissued)
+                .extracting(CanceledLot::earnPointKey,
+                        CanceledLot::amount,
+                        CanceledLot::reissued)
                 .containsExactly(
                         tuple(a.pointKey(), 1000L, false),
                         tuple(b.pointKey(), 200L, false));
@@ -110,7 +115,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
     @DisplayName("사용취소를 여러 번 나누어 할 수 있다")
     void partialCancelRepeatedly() {
         earn(1000, null);
-        PointResults.Use use = use(ORDER_ID, 900);
+        UseResult use = use(ORDER_ID, 900);
 
         assertThat(useService.cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isEqualTo(600);
         assertThat(useService.cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isEqualTo(300);
@@ -124,13 +129,13 @@ class PointUseServiceTest extends IntegrationTestSupport {
     @DisplayName("사용취소로 재적립된 포인트는 수기지급 여부를 승계한다")
     void reissuedPointInheritsManualFlag() {
         manualEarn(1000, 5);
-        PointResults.Use use = use(ORDER_ID, 1000);
+        UseResult use = use(ORDER_ID, 1000);
         clock.plusDays(6);
         expirationService.expireAll(100);
 
         useService.cancelUse(use.pointKey(), 1000);
 
-        PointResults.Balance balance = queryService.getBalance(USER_ID);
+        BalanceResult balance = queryService.getBalance(USER_ID);
         assertThat(balance.balance()).isEqualTo(1000);
         assertThat(balance.manualBalance()).isEqualTo(1000);
     }
@@ -139,13 +144,13 @@ class PointUseServiceTest extends IntegrationTestSupport {
     @DisplayName("만료 배치가 돌지 않았어도 만료 시각이 지난 적립분은 재적립으로 처리된다")
     void reissueWithoutExpirationBatch() {
         earn(1000, 5);
-        PointResults.Use use = use(ORDER_ID, 1000);
+        UseResult use = use(ORDER_ID, 1000);
         clock.plusDays(6);
 
-        PointResults.UseCancel cancel = useService.cancelUse(use.pointKey(), 1000);
+        UseCancelResult cancel = useService.cancelUse(use.pointKey(), 1000);
 
         assertThat(cancel.details()).singleElement()
-                .extracting(PointResults.CanceledLot::reissued)
+                .extracting(CanceledLot::reissued)
                 .isEqualTo(true);
         assertThat(balanceOf(USER_ID)).isEqualTo(1000);
     }
@@ -154,7 +159,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
     @DisplayName("사용취소로 인한 재적립은 최대 보유 한도를 초과해도 허용된다")
     void reissueIgnoresMaxBalance() {
         earn(100_000, 5);
-        PointResults.Use use = use(ORDER_ID, 100_000);
+        UseResult use = use(ORDER_ID, 100_000);
         for (int i = 0; i < 10; i++) {
             earn(100_000, 365);
         }
@@ -169,7 +174,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("적립 거래는 사용취소 대상이 아니다")
     void cannotCancelUseWithEarnTransaction() {
-        PointResults.Earn earn = earn(1000, null);
+        EarnResult earn = earn(1000, null);
 
         assertErrorCode(() -> useService.cancelUse(earn.pointKey(), 100), ErrorCode.NOT_USE_TRANSACTION);
     }

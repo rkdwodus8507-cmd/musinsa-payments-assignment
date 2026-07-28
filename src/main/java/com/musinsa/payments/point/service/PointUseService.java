@@ -10,18 +10,20 @@ import com.musinsa.payments.point.repository.PointLotRepository;
 import com.musinsa.payments.point.repository.PointLotUsageCancelRepository;
 import com.musinsa.payments.point.repository.PointLotUsageRepository;
 import com.musinsa.payments.point.repository.PointTransactionRepository;
-import com.musinsa.payments.point.service.dto.PointCommands;
-import com.musinsa.payments.point.service.dto.PointResults;
+import com.musinsa.payments.point.service.dto.CanceledLot;
+import com.musinsa.payments.point.service.dto.UseCancelResult;
+import com.musinsa.payments.point.service.dto.UseCommand;
+import com.musinsa.payments.point.service.dto.UseResult;
+import com.musinsa.payments.point.service.dto.UsedLot;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -38,7 +40,7 @@ public class PointUseService {
     private final Clock clock;
 
     @Transactional
-    public PointResults.Use use(PointCommands.Use command) {
+    public UseResult use(UseCommand command) {
         LocalDateTime now = LocalDateTime.now(clock);
 
         walletLocker.lock(command.userId());
@@ -53,7 +55,7 @@ public class PointUseService {
         PointTransaction useTransaction = transactionRepository.save(
                 PointTransaction.use(command.userId(), command.amount(), command.orderId(), now));
 
-        List<PointResults.UsedLot> details = new ArrayList<>();
+        List<UsedLot> details = new ArrayList<>();
         long unassigned = command.amount();
         for (PointLot lot : usableLots) {
             if (unassigned == 0) {
@@ -63,12 +65,12 @@ public class PointUseService {
             lot.use(deducted);
             lotUsageRepository.save(PointLotUsage.create(
                     useTransaction.getId(), lot.getId(), command.orderId(), deducted, now));
-            details.add(new PointResults.UsedLot(
+            details.add(new UsedLot(
                     earnPointKeyOf(lot), deducted, lot.isManual(), lot.getExpireAt()));
             unassigned -= deducted;
         }
 
-        return new PointResults.Use(
+        return new UseResult(
                 useTransaction.getPointKey(),
                 command.userId(),
                 command.orderId(),
@@ -78,7 +80,7 @@ public class PointUseService {
     }
 
     @Transactional
-    public PointResults.UseCancel cancelUse(String pointKey, long cancelAmount) {
+    public UseCancelResult cancelUse(String pointKey, long cancelAmount) {
         LocalDateTime now = LocalDateTime.now(clock);
         PointTransaction useTransaction = transactionRepository.findByPointKey(pointKey)
                 .orElseThrow(() -> PointException.of(ErrorCode.TRANSACTION_NOT_FOUND, "pointKey=" + pointKey));
@@ -100,7 +102,7 @@ public class PointUseService {
         PointTransaction cancelTransaction = transactionRepository.save(PointTransaction.useCancel(
                 userId, cancelAmount, useTransaction.getOrderId(), useTransaction.getId(), now));
 
-        List<PointResults.CanceledLot> details = new ArrayList<>();
+        List<CanceledLot> details = new ArrayList<>();
         long unassigned = cancelAmount;
         for (PointLotUsage usage : usages) {
             if (unassigned == 0) {
@@ -115,7 +117,7 @@ public class PointUseService {
             unassigned -= restorable;
         }
 
-        return new PointResults.UseCancel(
+        return new UseCancelResult(
                 cancelTransaction.getPointKey(),
                 useTransaction.getPointKey(),
                 userId,
@@ -126,11 +128,11 @@ public class PointUseService {
                 details);
     }
 
-    private PointResults.CanceledLot restoreOrReissue(PointLotUsage usage,
-                                                      long amount,
-                                                      PointTransaction cancelTransaction,
-                                                      PointPolicy policy,
-                                                      LocalDateTime now) {
+    private CanceledLot restoreOrReissue(PointLotUsage usage,
+                                         long amount,
+                                         PointTransaction cancelTransaction,
+                                         PointPolicy policy,
+                                         LocalDateTime now) {
         PointLot originLot = lotRepository.findById(usage.getLotId())
                 .orElseThrow(() -> PointException.of(ErrorCode.LOT_NOT_FOUND, "lotId=" + usage.getLotId()));
 
@@ -138,7 +140,7 @@ public class PointUseService {
             originLot.restore(amount);
             lotUsageCancelRepository.save(PointLotUsageCancel.restored(
                     cancelTransaction.getId(), usage.getId(), amount, originLot.getId(), now));
-            return new PointResults.CanceledLot(
+            return new CanceledLot(
                     earnPointKeyOf(originLot), amount, false, null, originLot.getExpireAt());
         }
 
@@ -154,7 +156,7 @@ public class PointUseService {
         lotUsageCancelRepository.save(PointLotUsageCancel.reissued(
                 cancelTransaction.getId(), usage.getId(), amount, reissuedLot.getId(), now));
 
-        return new PointResults.CanceledLot(
+        return new CanceledLot(
                 earnPointKeyOf(originLot), amount, true, reissuedTransaction.getPointKey(), reissuedLot.getExpireAt());
     }
 

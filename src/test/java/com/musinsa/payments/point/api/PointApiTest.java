@@ -1,7 +1,10 @@
 package com.musinsa.payments.point.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.musinsa.payments.point.api.dto.PointRequests;
+import com.musinsa.payments.point.api.dto.CancelUseRequest;
+import com.musinsa.payments.point.api.dto.EarnRequest;
+import com.musinsa.payments.point.api.dto.UpdatePolicyRequest;
+import com.musinsa.payments.point.api.dto.UseRequest;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +33,7 @@ class PointApiTest extends IntegrationTestSupport {
     void earnUseCancelFlow() throws Exception {
         String earnResponse = mockMvc.perform(post("/api/v1/points/earn")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.Earn(USER_ID, 1000, null, "이벤트 적립"))))
+                        .content(json(new EarnRequest(USER_ID, 1000, null, "이벤트 적립"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.amount").value(1000))
                 .andExpect(jsonPath("$.manual").value(false))
@@ -43,7 +46,7 @@ class PointApiTest extends IntegrationTestSupport {
 
         String useResponse = mockMvc.perform(post("/api/v1/points/use")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.Use(USER_ID, "A1234", 600))))
+                        .content(json(new UseRequest(USER_ID, "A1234", 600))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.balance").value(400))
                 .andExpect(jsonPath("$.details[0].earnPointKey").value(earnPointKey))
@@ -56,7 +59,7 @@ class PointApiTest extends IntegrationTestSupport {
 
         mockMvc.perform(post("/api/v1/points/use/{pointKey}/cancel", usePointKey)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.CancelUse(200))))
+                        .content(json(new CancelUseRequest(200))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.balance").value(600))
                 .andExpect(jsonPath("$.remainingCancelableAmount").value(400));
@@ -71,19 +74,19 @@ class PointApiTest extends IntegrationTestSupport {
     void manualEarnIsUsedFirst() throws Exception {
         mockMvc.perform(post("/api/v1/points/earn")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.Earn(USER_ID, 1000, 10, null))))
+                        .content(json(new EarnRequest(USER_ID, 1000, 10, null))))
                 .andExpect(status().isOk());
 
         String manualResponse = mockMvc.perform(post("/api/v1/admin/points/earn")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.Earn(USER_ID, 500, 300, "보상 지급"))))
+                        .content(json(new EarnRequest(USER_ID, 500, 300, "보상 지급"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.manual").value(true))
                 .andReturn().getResponse().getContentAsString();
 
         mockMvc.perform(post("/api/v1/points/use")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.Use(USER_ID, "A1234", 500))))
+                        .content(json(new UseRequest(USER_ID, "A1234", 500))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.details.length()").value(1))
                 .andExpect(jsonPath("$.details[0].earnPointKey").value(readPointKey(manualResponse)))
@@ -95,20 +98,20 @@ class PointApiTest extends IntegrationTestSupport {
     void updatePolicyThroughApi() throws Exception {
         mockMvc.perform(post("/api/v1/points/earn")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.Earn(USER_ID, 200_000, null, null))))
+                        .content(json(new EarnRequest(USER_ID, 200_000, null, null))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_EARN_AMOUNT"));
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .put("/api/v1/admin/points/policies")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.UpdatePolicy(1, 200_000, 1_000_000, 365, 1, 1824))))
+                        .content(json(new UpdatePolicyRequest(1, 200_000, 1_000_000, 365, 1, 1824))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.maxEarnAmount").value(200_000));
 
         mockMvc.perform(post("/api/v1/points/earn")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.Earn(USER_ID, 200_000, null, null))))
+                        .content(json(new EarnRequest(USER_ID, 200_000, null, null))))
                 .andExpect(status().isOk());
     }
 
@@ -117,7 +120,7 @@ class PointApiTest extends IntegrationTestSupport {
     void invalidRequestReturnsBadRequest() throws Exception {
         mockMvc.perform(post("/api/v1/points/use")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.Use(USER_ID, "", 0))))
+                        .content(json(new UseRequest(USER_ID, "", 0))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
 
@@ -131,7 +134,7 @@ class PointApiTest extends IntegrationTestSupport {
     void unmappedPathReturnsNotFound() throws Exception {
         mockMvc.perform(post("/api/v1/points/use//cancel")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new PointRequests.CancelUse(100))))
+                        .content(json(new CancelUseRequest(100))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
     }

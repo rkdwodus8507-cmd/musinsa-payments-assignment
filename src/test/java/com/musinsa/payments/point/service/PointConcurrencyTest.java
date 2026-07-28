@@ -1,15 +1,16 @@
 package com.musinsa.payments.point.service;
 
-import com.musinsa.payments.point.service.dto.PointCommands;
+import com.musinsa.payments.point.service.dto.EarnCommand;
+import com.musinsa.payments.point.service.dto.UpdatePolicyCommand;
+import com.musinsa.payments.point.service.dto.UseCommand;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,7 +28,7 @@ class PointConcurrencyTest extends IntegrationTestSupport {
 
         AtomicInteger success = new AtomicInteger();
         AtomicInteger failure = new AtomicInteger();
-        runConcurrently(index -> useService.use(new PointCommands.Use(USER_ID, "ORDER-" + index, 100)),
+        runConcurrently(index -> useService.use(new UseCommand(USER_ID, "ORDER-" + index, 100)),
                 success, failure);
 
         assertThat(success.get()).isEqualTo(5);
@@ -41,12 +42,12 @@ class PointConcurrencyTest extends IntegrationTestSupport {
     @DisplayName("최대 보유금액 근처에서 동시 적립해도 한도를 넘지 않는다")
     void concurrentEarnDoesNotExceedMaxBalance() throws InterruptedException {
         earn(100_000, null);
-        policyService.updatePolicy(new PointCommands.UpdatePolicy(
+        policyService.updatePolicy(new UpdatePolicyCommand(
                 1, 100_000, 500_000, 365, 1, 1824));
 
         AtomicInteger success = new AtomicInteger();
         AtomicInteger failure = new AtomicInteger();
-        runConcurrently(index -> earnService.earn(PointCommands.Earn.ofUser(USER_ID, 100_000, null, null)),
+        runConcurrently(index -> earnService.earn(EarnCommand.ofUser(USER_ID, 100_000, null, null)),
                 success, failure);
 
         assertThat(success.get()).isEqualTo(4);
@@ -58,7 +59,7 @@ class PointConcurrencyTest extends IntegrationTestSupport {
     void concurrentFirstRequestCreatesSingleWallet() throws InterruptedException {
         AtomicInteger success = new AtomicInteger();
         AtomicInteger failure = new AtomicInteger();
-        runConcurrently(index -> earnService.earn(PointCommands.Earn.ofUser(99L, 10, null, null)),
+        runConcurrently(index -> earnService.earn(EarnCommand.ofUser(99L, 10, null, null)),
                 success, failure);
 
         assertThat(success.get()).as("실패 원인: %s", errors).isEqualTo(THREAD_COUNT);
