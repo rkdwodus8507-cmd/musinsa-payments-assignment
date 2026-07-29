@@ -12,23 +12,23 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class PointExpirationService {
 
-    private final PointExpirationProcessor expirationProcessor;
+    private final ExpiredPointMarker expiredPointMarker;
     private final Clock clock;
 
     public ExpirationResult expireAll(int chunkSize) {
         LocalDateTime baseTime = LocalDateTime.now(clock);
         int totalCount = 0;
         long totalAmount = 0;
-        while (true) {
-            ExpirationResult chunk = expirationProcessor.expireChunk(baseTime, chunkSize);
-            totalCount += chunk.expiredLotCount();
+
+        ExpirationResult chunk;
+        do {
+            chunk = expiredPointMarker.markChunk(baseTime, chunkSize);
+            totalCount += chunk.expiredCount();
             totalAmount += chunk.expiredAmount();
-            if (chunk.expiredLotCount() < chunkSize) {
-                break;
-            }
-        }
+        } while (chunk.expiredCount() == chunkSize);
+
         if (totalCount > 0) {
-            log.info("expired {} lots, {} points at {}", totalCount, totalAmount, baseTime);
+            log.info("expired {} earned points, {} points at {}", totalCount, totalAmount, baseTime);
         }
         return new ExpirationResult(totalCount, totalAmount);
     }

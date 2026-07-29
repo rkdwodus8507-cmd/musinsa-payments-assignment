@@ -8,12 +8,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
+import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "point_transaction")
@@ -28,7 +27,7 @@ public class PointTransaction {
     @Column(nullable = false, updatable = false, length = 36)
     private String pointKey;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private Long userId;
 
     @Enumerated(EnumType.STRING)
@@ -43,30 +42,33 @@ public class PointTransaction {
 
     private Long relatedTransactionId;
 
+    @Column(length = 64, updatable = false)
+    private String requestKey;
+
     @Column(length = 255)
     private String memo;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public static PointTransaction earn(Long userId, long amount, String memo, LocalDateTime now) {
-        return create(userId, PointTransactionType.EARN, amount, null, null, memo, now);
+    public static PointTransaction earn(Long userId, long amount, String memo, String requestKey, LocalDateTime now) {
+        return of(userId, PointTransactionType.EARN, amount, null, null, requestKey, memo, now);
     }
 
     public static PointTransaction reissuedEarn(Long userId, long amount, Long cancelTransactionId, String memo, LocalDateTime now) {
-        return create(userId, PointTransactionType.EARN, amount, null, cancelTransactionId, memo, now);
+        return of(userId, PointTransactionType.EARN, amount, null, cancelTransactionId, null, memo, now);
     }
 
-    public static PointTransaction earnCancel(Long userId, long amount, Long earnTransactionId, LocalDateTime now) {
-        return create(userId, PointTransactionType.EARN_CANCEL, amount, null, earnTransactionId, null, now);
+    public static PointTransaction earnCancel(Long userId, long amount, Long earnTransactionId, String requestKey, LocalDateTime now) {
+        return of(userId, PointTransactionType.EARN_CANCEL, amount, null, earnTransactionId, requestKey, null, now);
     }
 
-    public static PointTransaction use(Long userId, long amount, String orderId, LocalDateTime now) {
-        return create(userId, PointTransactionType.USE, amount, orderId, null, null, now);
+    public static PointTransaction use(Long userId, long amount, String orderId, String requestKey, LocalDateTime now) {
+        return of(userId, PointTransactionType.USE, amount, orderId, null, requestKey, null, now);
     }
 
-    public static PointTransaction useCancel(Long userId, long amount, String orderId, Long useTransactionId, LocalDateTime now) {
-        return create(userId, PointTransactionType.USE_CANCEL, amount, orderId, useTransactionId, null, now);
+    public static PointTransaction useCancel(Long userId, long amount, String orderId, Long useTransactionId, String requestKey, LocalDateTime now) {
+        return of(userId, PointTransactionType.USE_CANCEL, amount, orderId, useTransactionId, requestKey, null, now);
     }
 
     public boolean isEarn() {
@@ -77,13 +79,14 @@ public class PointTransaction {
         return type == PointTransactionType.USE;
     }
 
-    private static PointTransaction create(Long userId,
-                                           PointTransactionType type,
-                                           long amount,
-                                           String orderId,
-                                           Long relatedTransactionId,
-                                           String memo,
-                                           LocalDateTime now) {
+    private static PointTransaction of(Long userId,
+                                       PointTransactionType type,
+                                       long amount,
+                                       String orderId,
+                                       Long relatedTransactionId,
+                                       String requestKey,
+                                       String memo,
+                                       LocalDateTime now) {
         PointTransaction transaction = new PointTransaction();
         transaction.pointKey = UUID.randomUUID().toString();
         transaction.userId = userId;
@@ -91,6 +94,7 @@ public class PointTransaction {
         transaction.amount = amount;
         transaction.orderId = orderId;
         transaction.relatedTransactionId = relatedTransactionId;
+        transaction.requestKey = requestKey;
         transaction.memo = memo;
         transaction.createdAt = now;
         return transaction;

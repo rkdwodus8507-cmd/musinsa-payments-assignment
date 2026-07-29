@@ -1,11 +1,11 @@
 package com.musinsa.payments.point.service;
 
-import com.musinsa.payments.point.domain.PointLotStatus;
+import com.musinsa.payments.point.domain.EarnedPointStatus;
 import com.musinsa.payments.point.service.dto.BalanceResult;
 import com.musinsa.payments.point.service.dto.EarnCancelResult;
 import com.musinsa.payments.point.service.dto.EarnCommand;
 import com.musinsa.payments.point.service.dto.EarnResult;
-import com.musinsa.payments.point.service.dto.LotBalance;
+import com.musinsa.payments.point.service.dto.EarnedPointSummary;
 import com.musinsa.payments.point.service.dto.UseResult;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import com.musinsa.payments.point.support.MutableClock;
@@ -82,12 +82,12 @@ class PointEarnServiceTest extends IntegrationTestSupport {
         assertThat(balance.manualBalance()).isEqualTo(1000);
         assertThat(balance.balance()).isEqualTo(2000);
         assertThat(balance.lots())
-                .filteredOn(LotBalance::manual)
-                .extracting(LotBalance::earnPointKey)
+                .filteredOn(EarnedPointSummary::manual)
+                .extracting(EarnedPointSummary::earnPointKey)
                 .containsExactly(manual.pointKey());
         assertThat(balance.lots())
                 .filteredOn(lot -> !lot.manual())
-                .extracting(LotBalance::earnPointKey)
+                .extracting(EarnedPointSummary::earnPointKey)
                 .containsExactly(normal.pointKey());
     }
 
@@ -96,12 +96,12 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     void cancelUnusedEarn() {
         EarnResult earn = earn(1000, null);
 
-        EarnCancelResult result = earnService.cancelEarn(earn.pointKey());
+        EarnCancelResult result = cancelEarn(earn.pointKey());
 
         assertThat(result.amount()).isEqualTo(1000);
         assertThat(result.balance()).isZero();
         assertThat(balanceOf(USER_ID)).isZero();
-        assertThat(lotStatusOf(earn.pointKey())).isEqualTo(PointLotStatus.CANCELED);
+        assertThat(lotStatusOf(earn.pointKey())).isEqualTo(EarnedPointStatus.CANCELED);
     }
 
     @Test
@@ -110,16 +110,16 @@ class PointEarnServiceTest extends IntegrationTestSupport {
         EarnResult earn = earn(1000, null);
         use("ORDER-1", 100);
 
-        assertErrorCode(() -> earnService.cancelEarn(earn.pointKey()), ErrorCode.EARN_PARTIALLY_USED);
+        assertErrorCode(() -> cancelEarn(earn.pointKey()), ErrorCode.EARN_PARTIALLY_USED);
     }
 
     @Test
     @DisplayName("이미 취소된 적립은 다시 취소할 수 없다")
     void cannotCancelTwice() {
         EarnResult earn = earn(1000, null);
-        earnService.cancelEarn(earn.pointKey());
+        cancelEarn(earn.pointKey());
 
-        assertErrorCode(() -> earnService.cancelEarn(earn.pointKey()), ErrorCode.EARN_ALREADY_CANCELED);
+        assertErrorCode(() -> cancelEarn(earn.pointKey()), ErrorCode.EARN_ALREADY_CANCELED);
     }
 
     @Test
@@ -128,7 +128,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
         EarnResult earn = earn(1000, 1);
         clock.plusDays(2);
 
-        assertErrorCode(() -> earnService.cancelEarn(earn.pointKey()), ErrorCode.EARN_ALREADY_EXPIRED);
+        assertErrorCode(() -> cancelEarn(earn.pointKey()), ErrorCode.EARN_ALREADY_EXPIRED);
     }
 
     @Test
@@ -137,27 +137,27 @@ class PointEarnServiceTest extends IntegrationTestSupport {
         earn(1000, null);
         UseResult use = use("ORDER-1", 100);
 
-        assertErrorCode(() -> earnService.cancelEarn(use.pointKey()), ErrorCode.NOT_EARN_TRANSACTION);
+        assertErrorCode(() -> cancelEarn(use.pointKey()), ErrorCode.NOT_EARN_TRANSACTION);
     }
 
     @Test
     @DisplayName("존재하지 않는 pointKey는 조회되지 않는다")
     void cancelEarnWithUnknownPointKey() {
-        assertErrorCode(() -> earnService.cancelEarn("unknown-key"), ErrorCode.TRANSACTION_NOT_FOUND);
+        assertErrorCode(() -> cancelEarn("unknown-key"), ErrorCode.TRANSACTION_NOT_FOUND);
     }
 
     @Test
     @DisplayName("사용자별로 잔액이 분리된다")
     void balanceIsolatedPerUser() {
         earn(1000, null);
-        earnService.earn(EarnCommand.ofUser(2L, 500, null, null));
+        earnService.earn(EarnCommand.ofUser(2L, 500, null, null, null));
 
         assertThat(balanceOf(USER_ID)).isEqualTo(1000);
         assertThat(balanceOf(2L)).isEqualTo(500);
     }
 
-    private PointLotStatus lotStatusOf(String earnPointKey) {
-        return lotRepository.findByTransactionId(
+    private EarnedPointStatus lotStatusOf(String earnPointKey) {
+        return earnedPointRepository.findByTransactionId(
                         transactionRepository.findByPointKey(earnPointKey).orElseThrow().getId())
                 .orElseThrow()
                 .getStatus();

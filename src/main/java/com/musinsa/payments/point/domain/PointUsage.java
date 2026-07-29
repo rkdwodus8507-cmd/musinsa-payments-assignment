@@ -8,17 +8,16 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 @Entity
-@Table(name = "point_lot_usage")
+@Table(name = "point_usage")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class PointLotUsage {
+public class PointUsage {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -28,7 +27,7 @@ public class PointLotUsage {
     private Long useTransactionId;
 
     @Column(nullable = false, updatable = false)
-    private Long lotId;
+    private Long earnedPointId;
 
     @Column(nullable = false, updatable = false, length = 64)
     private String orderId;
@@ -42,14 +41,14 @@ public class PointLotUsage {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public static PointLotUsage create(Long useTransactionId,
-                                       Long lotId,
-                                       String orderId,
-                                       long amount,
-                                       LocalDateTime now) {
-        PointLotUsage usage = new PointLotUsage();
+    public static PointUsage of(Long useTransactionId,
+                                Long earnedPointId,
+                                String orderId,
+                                long amount,
+                                LocalDateTime now) {
+        PointUsage usage = new PointUsage();
         usage.useTransactionId = useTransactionId;
-        usage.lotId = lotId;
+        usage.earnedPointId = earnedPointId;
         usage.orderId = orderId;
         usage.amount = amount;
         usage.canceledAmount = 0;

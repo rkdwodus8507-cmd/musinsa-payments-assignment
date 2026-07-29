@@ -1,15 +1,15 @@
 package com.musinsa.payments.point;
 
-import com.musinsa.payments.point.domain.PointLot;
-import com.musinsa.payments.point.domain.PointLotStatus;
+import com.musinsa.payments.point.domain.EarnedPoint;
+import com.musinsa.payments.point.domain.EarnedPointStatus;
 import com.musinsa.payments.point.domain.PointTransaction;
-import com.musinsa.payments.point.service.dto.CanceledLot;
+import com.musinsa.payments.point.service.dto.CanceledPointDetail;
 import com.musinsa.payments.point.service.dto.EarnResult;
 import com.musinsa.payments.point.service.dto.OrderUsageDetail;
 import com.musinsa.payments.point.service.dto.OrderUsageResult;
 import com.musinsa.payments.point.service.dto.UseCancelResult;
 import com.musinsa.payments.point.service.dto.UseResult;
-import com.musinsa.payments.point.service.dto.UsedLot;
+import com.musinsa.payments.point.service.dto.UsedPointDetail;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
@@ -36,38 +36,38 @@ class PointScenarioTest extends IntegrationTestSupport {
 
         UseResult c = use(ORDER_ID, 1200);
         assertThat(balanceOf(USER_ID)).isEqualTo(300);
-        assertThat(c.details()).extracting(UsedLot::earnPointKey, UsedLot::amount)
+        assertThat(c.details()).extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
                 .containsExactly(
                         tuple(a.pointKey(), 1000L),
                         tuple(b.pointKey(), 200L));
-        assertThat(lotOf(a).getRemainingAmount()).isZero();
-        assertThat(lotOf(b).getRemainingAmount()).isEqualTo(300);
+        assertThat(earnedPointOf(a).getRemainingAmount()).isZero();
+        assertThat(earnedPointOf(b).getRemainingAmount()).isEqualTo(300);
 
         clock.plusDays(31);
         expirationService.expireAll(500);
-        assertThat(lotOf(a).getStatus()).isEqualTo(PointLotStatus.EXPIRED);
+        assertThat(earnedPointOf(a).getStatus()).isEqualTo(EarnedPointStatus.EXPIRED);
         assertThat(balanceOf(USER_ID)).isEqualTo(300);
 
-        UseCancelResult d = useService.cancelUse(c.pointKey(), 1100);
+        UseCancelResult d = cancelUse(c.pointKey(), 1100);
 
         assertThat(balanceOf(USER_ID)).isEqualTo(1400);
         assertThat(d.remainingCancelableAmount()).isEqualTo(100);
-        assertThat(lotOf(b).getRemainingAmount()).isEqualTo(400);
-        assertThat(lotOf(a).getRemainingAmount()).isZero();
+        assertThat(earnedPointOf(b).getRemainingAmount()).isEqualTo(400);
+        assertThat(earnedPointOf(a).getRemainingAmount()).isZero();
 
-        CanceledLot reissued = d.details().stream()
-                .filter(CanceledLot::reissued)
+        CanceledPointDetail reissued = d.details().stream()
+                .filter(CanceledPointDetail::reissued)
                 .findFirst()
                 .orElseThrow();
         assertThat(reissued.earnPointKey()).isEqualTo(a.pointKey());
         assertThat(reissued.amount()).isEqualTo(1000);
 
-        PointLot reissuedLot = lotOf(reissued.reissuedPointKey());
-        assertThat(reissuedLot.getRemainingAmount()).isEqualTo(1000);
-        assertThat(reissuedLot.getStatus()).isEqualTo(PointLotStatus.AVAILABLE);
-        assertThat(reissuedLot.getExpireAt()).isEqualTo(clock.currentDateTime().plusDays(365));
+        EarnedPoint reissuedEarnedPoint = earnedPointOf(reissued.reissuedPointKey());
+        assertThat(reissuedEarnedPoint.getRemainingAmount()).isEqualTo(1000);
+        assertThat(reissuedEarnedPoint.getStatus()).isEqualTo(EarnedPointStatus.AVAILABLE);
+        assertThat(reissuedEarnedPoint.getExpireAt()).isEqualTo(clock.currentDateTime().plusDays(365));
 
-        CanceledLot restored = d.details().stream()
+        CanceledPointDetail restored = d.details().stream()
                 .filter(detail -> !detail.reissued())
                 .findFirst()
                 .orElseThrow();
@@ -82,14 +82,14 @@ class PointScenarioTest extends IntegrationTestSupport {
         earn(500, 365);
         UseResult c = use(ORDER_ID, 1200);
 
-        useService.cancelUse(c.pointKey(), 1100);
+        cancelUse(c.pointKey(), 1100);
 
-        assertThatThrownBy(() -> useService.cancelUse(c.pointKey(), 101))
+        assertThatThrownBy(() -> cancelUse(c.pointKey(), 101))
                 .isInstanceOf(PointException.class)
                 .extracting(e -> ((PointException) e).getErrorCode())
                 .isEqualTo(ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED);
 
-        UseCancelResult last = useService.cancelUse(c.pointKey(), 100);
+        UseCancelResult last = cancelUse(c.pointKey(), 100);
         assertThat(last.remainingCancelableAmount()).isZero();
     }
 
@@ -115,12 +115,12 @@ class PointScenarioTest extends IntegrationTestSupport {
                         tuple(c.pointKey(), b.pointKey(), 200L));
     }
 
-    private PointLot lotOf(EarnResult earn) {
-        return lotOf(earn.pointKey());
+    private EarnedPoint earnedPointOf(EarnResult earn) {
+        return earnedPointOf(earn.pointKey());
     }
 
-    private PointLot lotOf(String pointKey) {
+    private EarnedPoint earnedPointOf(String pointKey) {
         PointTransaction transaction = transactionRepository.findByPointKey(pointKey).orElseThrow();
-        return lotRepository.findByTransactionId(transaction.getId()).orElseThrow();
+        return earnedPointRepository.findByTransactionId(transaction.getId()).orElseThrow();
     }
 }

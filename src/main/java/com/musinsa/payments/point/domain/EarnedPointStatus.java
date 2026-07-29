@@ -1,6 +1,6 @@
 package com.musinsa.payments.point.domain;
 
-public enum PointLotStatus {
+public enum EarnedPointStatus {
     AVAILABLE,
     EXPIRED,
     CANCELED

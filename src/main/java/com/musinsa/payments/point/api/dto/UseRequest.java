@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 public record UseRequest(
         @NotNull Long userId,
         @NotBlank @Size(max = 64) String orderId,
-        @Positive long amount
+        @Positive long amount,
+        @Size(max = 64) String requestKey
 ) {
 }

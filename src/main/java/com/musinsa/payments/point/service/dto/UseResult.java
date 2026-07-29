@@ -7,5 +7,5 @@ public record UseResult(String pointKey,
                         String orderId,
                         long amount,
                         long balance,
-                        List<UsedLot> details) {
+                        List<UsedPointDetail> details) {
 }

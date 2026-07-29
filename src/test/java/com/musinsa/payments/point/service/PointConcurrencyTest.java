@@ -28,13 +28,13 @@ class PointConcurrencyTest extends IntegrationTestSupport {
 
         AtomicInteger success = new AtomicInteger();
         AtomicInteger failure = new AtomicInteger();
-        runConcurrently(index -> useService.use(new UseCommand(USER_ID, "ORDER-" + index, 100)),
+        runConcurrently(index -> useService.use(new UseCommand(USER_ID, "ORDER-" + index, 100, null)),
                 success, failure);
 
         assertThat(success.get()).isEqualTo(5);
         assertThat(failure.get()).isEqualTo(5);
         assertThat(balanceOf(USER_ID)).isZero();
-        assertThat(lotRepository.findByUserIdOrderByIdAsc(USER_ID))
+        assertThat(earnedPointRepository.findByUserIdOrderByIdAsc(USER_ID))
                 .allSatisfy(lot -> assertThat(lot.getRemainingAmount()).isNotNegative());
     }
 
@@ -47,7 +47,7 @@ class PointConcurrencyTest extends IntegrationTestSupport {
 
         AtomicInteger success = new AtomicInteger();
         AtomicInteger failure = new AtomicInteger();
-        runConcurrently(index -> earnService.earn(EarnCommand.ofUser(USER_ID, 100_000, null, null)),
+        runConcurrently(index -> earnService.earn(EarnCommand.ofUser(USER_ID, 100_000, null, null, null)),
                 success, failure);
 
         assertThat(success.get()).isEqualTo(4);
@@ -55,15 +55,15 @@ class PointConcurrencyTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("최초 요청이 동시에 들어와도 지갑은 하나만 생성된다")
-    void concurrentFirstRequestCreatesSingleWallet() throws InterruptedException {
+    @DisplayName("최초 요청이 동시에 들어와도 락 행은 하나만 생성된다")
+    void concurrentFirstRequestCreatesSingleLockRow() throws InterruptedException {
         AtomicInteger success = new AtomicInteger();
         AtomicInteger failure = new AtomicInteger();
-        runConcurrently(index -> earnService.earn(EarnCommand.ofUser(99L, 10, null, null)),
+        runConcurrently(index -> earnService.earn(EarnCommand.ofUser(99L, 10, null, null, null)),
                 success, failure);
 
         assertThat(success.get()).as("실패 원인: %s", errors).isEqualTo(THREAD_COUNT);
-        assertThat(walletRepository.findByUserId(99L)).isPresent();
+        assertThat(lockRepository.findByUserId(99L)).isPresent();
         assertThat(balanceOf(99L)).isEqualTo(100);
     }
 

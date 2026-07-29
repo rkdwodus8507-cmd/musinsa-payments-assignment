@@ -5,5 +5,5 @@ import java.util.List;
 public record BalanceResult(Long userId,
                             long balance,
                             long manualBalance,
-                            List<LotBalance> lots) {
+                            List<EarnedPointSummary> lots) {
 }

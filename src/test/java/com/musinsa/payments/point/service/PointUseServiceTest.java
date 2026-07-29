@@ -1,11 +1,11 @@
 package com.musinsa.payments.point.service;
 
 import com.musinsa.payments.point.service.dto.BalanceResult;
-import com.musinsa.payments.point.service.dto.CanceledLot;
+import com.musinsa.payments.point.service.dto.CanceledPointDetail;
 import com.musinsa.payments.point.service.dto.EarnResult;
 import com.musinsa.payments.point.service.dto.UseCancelResult;
 import com.musinsa.payments.point.service.dto.UseResult;
-import com.musinsa.payments.point.service.dto.UsedLot;
+import com.musinsa.payments.point.service.dto.UsedPointDetail;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
@@ -30,7 +30,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         UseResult use = use(ORDER_ID, 700);
 
         assertThat(use.details())
-                .extracting(UsedLot::earnPointKey, UsedLot::amount)
+                .extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
                 .containsExactly(
                         tuple(manualLater.pointKey(), 500L),
                         tuple(normalSoon.pointKey(), 200L));
@@ -45,7 +45,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         UseResult use = use(ORDER_ID, 400);
 
         assertThat(use.details())
-                .extracting(UsedLot::earnPointKey, UsedLot::amount)
+                .extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
                 .containsExactly(
                         tuple(sooner.pointKey(), 300L),
                         tuple(later.pointKey(), 100L));
@@ -61,7 +61,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         UseResult use = use(ORDER_ID, 750);
 
         assertThat(use.details())
-                .extracting(UsedLot::earnPointKey, UsedLot::amount)
+                .extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
                 .containsExactly(
                         tuple(sooner.pointKey(), 300L),
                         tuple(middle.pointKey(), 300L),
@@ -98,14 +98,14 @@ class PointUseServiceTest extends IntegrationTestSupport {
         EarnResult b = earn(500, 365);
         UseResult use = use(ORDER_ID, 1200);
 
-        UseCancelResult cancel = useService.cancelUse(use.pointKey(), 1200);
+        UseCancelResult cancel = cancelUse(use.pointKey(), 1200);
 
         assertThat(cancel.balance()).isEqualTo(1500);
         assertThat(cancel.remainingCancelableAmount()).isZero();
         assertThat(cancel.details())
-                .extracting(CanceledLot::earnPointKey,
-                        CanceledLot::amount,
-                        CanceledLot::reissued)
+                .extracting(CanceledPointDetail::earnPointKey,
+                        CanceledPointDetail::amount,
+                        CanceledPointDetail::reissued)
                 .containsExactly(
                         tuple(a.pointKey(), 1000L, false),
                         tuple(b.pointKey(), 200L, false));
@@ -117,12 +117,12 @@ class PointUseServiceTest extends IntegrationTestSupport {
         earn(1000, null);
         UseResult use = use(ORDER_ID, 900);
 
-        assertThat(useService.cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isEqualTo(600);
-        assertThat(useService.cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isEqualTo(300);
-        assertThat(useService.cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isZero();
+        assertThat(cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isEqualTo(600);
+        assertThat(cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isEqualTo(300);
+        assertThat(cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isZero();
         assertThat(balanceOf(USER_ID)).isEqualTo(1000);
 
-        assertErrorCode(() -> useService.cancelUse(use.pointKey(), 1), ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED);
+        assertErrorCode(() -> cancelUse(use.pointKey(), 1), ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED);
     }
 
     @Test
@@ -133,7 +133,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         clock.plusDays(6);
         expirationService.expireAll(100);
 
-        useService.cancelUse(use.pointKey(), 1000);
+        cancelUse(use.pointKey(), 1000);
 
         BalanceResult balance = queryService.getBalance(USER_ID);
         assertThat(balance.balance()).isEqualTo(1000);
@@ -147,10 +147,10 @@ class PointUseServiceTest extends IntegrationTestSupport {
         UseResult use = use(ORDER_ID, 1000);
         clock.plusDays(6);
 
-        UseCancelResult cancel = useService.cancelUse(use.pointKey(), 1000);
+        UseCancelResult cancel = cancelUse(use.pointKey(), 1000);
 
         assertThat(cancel.details()).singleElement()
-                .extracting(CanceledLot::reissued)
+                .extracting(CanceledPointDetail::reissued)
                 .isEqualTo(true);
         assertThat(balanceOf(USER_ID)).isEqualTo(1000);
     }
@@ -166,7 +166,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         assertThat(balanceOf(USER_ID)).isEqualTo(1_000_000);
 
         clock.plusDays(6);
-        useService.cancelUse(use.pointKey(), 100_000);
+        cancelUse(use.pointKey(), 100_000);
 
         assertThat(balanceOf(USER_ID)).isEqualTo(1_100_000);
     }
@@ -176,7 +176,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
     void cannotCancelUseWithEarnTransaction() {
         EarnResult earn = earn(1000, null);
 
-        assertErrorCode(() -> useService.cancelUse(earn.pointKey(), 100), ErrorCode.NOT_USE_TRANSACTION);
+        assertErrorCode(() -> cancelUse(earn.pointKey(), 100), ErrorCode.NOT_USE_TRANSACTION);
     }
 
     private void assertErrorCode(Runnable runnable, ErrorCode expected) {

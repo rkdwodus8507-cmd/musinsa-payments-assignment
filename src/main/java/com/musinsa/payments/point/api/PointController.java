@@ -1,5 +1,6 @@
 package com.musinsa.payments.point.api;
 
+import com.musinsa.payments.point.api.dto.CancelEarnRequest;
 import com.musinsa.payments.point.api.dto.CancelUseRequest;
 import com.musinsa.payments.point.api.dto.EarnRequest;
 import com.musinsa.payments.point.api.dto.UseRequest;
@@ -7,6 +8,8 @@ import com.musinsa.payments.point.service.PointEarnService;
 import com.musinsa.payments.point.service.PointQueryService;
 import com.musinsa.payments.point.service.PointUseService;
 import com.musinsa.payments.point.service.dto.BalanceResult;
+import com.musinsa.payments.point.service.dto.CancelEarnCommand;
+import com.musinsa.payments.point.service.dto.CancelUseCommand;
 import com.musinsa.payments.point.service.dto.EarnCancelResult;
 import com.musinsa.payments.point.service.dto.EarnCommand;
 import com.musinsa.payments.point.service.dto.EarnResult;
@@ -39,33 +42,36 @@ public class PointController {
     private final PointUseService useService;
     private final PointQueryService queryService;
 
-    @Operation(summary = "포인트 적립")
+    @Operation(summary = "포인트 적립", description = "requestKey 를 보내면 같은 요청이 재전송되어도 한 번만 적립된다.")
     @PostMapping("/earn")
     public EarnResult earn(@Valid @RequestBody EarnRequest request) {
         return earnService.earn(EarnCommand.ofUser(
-                request.userId(), request.amount(), request.expireDays(), request.memo()));
+                request.userId(), request.amount(), request.expireDays(), request.memo(), request.requestKey()));
     }
 
     @Operation(summary = "포인트 적립 취소", description = "적립분이 일부라도 사용되었으면 취소할 수 없다.")
     @PostMapping("/earn/{pointKey}/cancel")
-    public EarnCancelResult cancelEarn(@PathVariable String pointKey) {
-        return earnService.cancelEarn(pointKey);
+    public EarnCancelResult cancelEarn(@PathVariable String pointKey,
+                                       @RequestBody(required = false) CancelEarnRequest request) {
+        String requestKey = request == null ? null : request.requestKey();
+        return earnService.cancelEarn(new CancelEarnCommand(pointKey, requestKey));
     }
 
     @Operation(summary = "포인트 사용", description = "관리자 수기지급분 우선, 만료 임박 순으로 차감한다.")
     @PostMapping("/use")
     public UseResult use(@Valid @RequestBody UseRequest request) {
-        return useService.use(new UseCommand(request.userId(), request.orderId(), request.amount()));
+        return useService.use(new UseCommand(
+                request.userId(), request.orderId(), request.amount(), request.requestKey()));
     }
 
     @Operation(summary = "포인트 사용 취소", description = "전체 또는 일부 취소 가능. 복원 대상이 만료된 경우 신규 적립으로 처리한다.")
     @PostMapping("/use/{pointKey}/cancel")
     public UseCancelResult cancelUse(@PathVariable String pointKey,
                                      @Valid @RequestBody CancelUseRequest request) {
-        return useService.cancelUse(pointKey, request.amount());
+        return useService.cancelUse(new CancelUseCommand(pointKey, request.amount(), request.requestKey()));
     }
 
-    @Operation(summary = "포인트 잔액 및 적립 단위 조회")
+    @Operation(summary = "포인트 잔액 및 적립분 조회")
     @GetMapping("/balance")
     public BalanceResult getBalance(@RequestParam Long userId) {
         return queryService.getBalance(userId);
@@ -74,8 +80,8 @@ public class PointController {
     @Operation(summary = "포인트 거래 이력 조회")
     @GetMapping("/transactions")
     public Page<TransactionResult> getTransactions(@RequestParam Long userId,
-                                                   @RequestParam(defaultValue = "0") int page,
-                                                   @RequestParam(defaultValue = "20") int size) {
+                                                  @RequestParam(defaultValue = "0") int page,
+                                                  @RequestParam(defaultValue = "20") int size) {
         return queryService.getTransactions(userId, PageRequest.of(page, size));
     }
 

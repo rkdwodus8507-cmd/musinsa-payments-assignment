@@ -9,6 +9,7 @@ public record EarnRequest(
         @NotNull Long userId,
         @Positive long amount,
         @Min(1) Integer expireDays,
-        @Size(max = 255) String memo
+        @Size(max = 255) String memo,
+        @Size(max = 64) String requestKey
 ) {
 }

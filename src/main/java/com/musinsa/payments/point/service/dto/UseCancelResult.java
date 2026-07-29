@@ -9,5 +9,5 @@ public record UseCancelResult(String pointKey,
                               long amount,
                               long remainingCancelableAmount,
                               long balance,
-                              List<CanceledLot> details) {
+                              List<CanceledPointDetail> details) {
 }

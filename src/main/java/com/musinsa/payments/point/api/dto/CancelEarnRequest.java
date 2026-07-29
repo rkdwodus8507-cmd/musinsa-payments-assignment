@@ -1,10 +1,8 @@
 package com.musinsa.payments.point.api.dto;
 
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
-public record CancelUseRequest(
-        @Positive long amount,
+public record CancelEarnRequest(
         @Size(max = 64) String requestKey
 ) {
 }

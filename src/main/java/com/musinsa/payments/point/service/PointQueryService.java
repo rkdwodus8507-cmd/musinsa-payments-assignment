@@ -1,23 +1,20 @@
 package com.musinsa.payments.point.service;
 
-import com.musinsa.payments.point.domain.PointLot;
-import com.musinsa.payments.point.domain.PointLotStatus;
-import com.musinsa.payments.point.domain.PointLotUsage;
+import com.musinsa.payments.point.domain.EarnedPoint;
+import com.musinsa.payments.point.domain.EarnedPointStatus;
 import com.musinsa.payments.point.domain.PointTransaction;
-import com.musinsa.payments.point.repository.PointLotRepository;
-import com.musinsa.payments.point.repository.PointLotUsageRepository;
+import com.musinsa.payments.point.domain.PointUsage;
 import com.musinsa.payments.point.repository.PointTransactionRepository;
+import com.musinsa.payments.point.repository.PointUsageRepository;
 import com.musinsa.payments.point.service.dto.BalanceResult;
-import com.musinsa.payments.point.service.dto.LotBalance;
+import com.musinsa.payments.point.service.dto.EarnedPointSummary;
 import com.musinsa.payments.point.service.dto.OrderUsageDetail;
 import com.musinsa.payments.point.service.dto.OrderUsageResult;
 import com.musinsa.payments.point.service.dto.TransactionResult;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -31,35 +28,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class PointQueryService {
 
     private final PointTransactionRepository transactionRepository;
-    private final PointLotRepository lotRepository;
-    private final PointLotUsageRepository lotUsageRepository;
+    private final PointUsageRepository usageRepository;
+    private final EarnedPointReader earnedPointReader;
     private final Clock clock;
 
     public BalanceResult getBalance(Long userId) {
         LocalDateTime now = LocalDateTime.now(clock);
-        List<PointLot> lots = lotRepository.findByUserIdOrderByIdAsc(userId);
-        Map<Long, String> pointKeys = pointKeysOf(lots);
+        List<EarnedPoint> earnedPoints = earnedPointReader.allOf(userId);
+        Map<Long, String> earnPointKeys = earnedPointReader.earnPointKeyByEarnedPointId(earnedPoints);
 
-        long balance = 0;
-        long manualBalance = 0;
-        List<LotBalance> lotResults = new ArrayList<>();
-        for (PointLot lot : lots) {
-            boolean available = lot.isUsableAt(now);
-            if (available) {
-                balance += lot.getRemainingAmount();
-                if (lot.isManual()) {
-                    manualBalance += lot.getRemainingAmount();
-                }
-            }
-            lotResults.add(new LotBalance(
-                    pointKeys.get(lot.getTransactionId()),
-                    lot.getOriginalAmount(),
-                    lot.getRemainingAmount(),
-                    lot.isManual(),
-                    displayStatus(lot, now),
-                    lot.getExpireAt()));
-        }
-        return new BalanceResult(userId, balance, manualBalance, lotResults);
+        return new BalanceResult(
+                userId,
+                sumUsable(earnedPoints, now, false),
+                sumUsable(earnedPoints, now, true),
+                toSummaries(earnedPoints, earnPointKeys, now));
     }
 
     public Page<TransactionResult> getTransactions(Long userId, Pageable pageable) {
@@ -74,38 +56,59 @@ public class PointQueryService {
     }
 
     public OrderUsageResult getOrderUsage(String orderId) {
-        List<PointLotUsage> usages = lotUsageRepository.findByOrderIdOrderByIdAsc(orderId);
-        Map<Long, PointLot> lots = lotRepository.findAllById(
-                        usages.stream().map(PointLotUsage::getLotId).distinct().toList())
-                .stream()
-                .collect(Collectors.toMap(PointLot::getId, Function.identity()));
-        Map<Long, String> usePointKeys = transactionRepository.findByIdIn(
-                        usages.stream().map(PointLotUsage::getUseTransactionId).distinct().toList())
-                .stream()
-                .collect(Collectors.toMap(PointTransaction::getId, PointTransaction::getPointKey));
-        Map<Long, String> earnPointKeys = pointKeysOf(lots.values());
+        List<PointUsage> usages = usageRepository.findByOrderIdOrderByIdAsc(orderId);
+        Map<Long, EarnedPoint> sources = earnedPointReader.byIds(
+                usages.stream().map(PointUsage::getEarnedPointId).distinct().toList());
+        Map<Long, String> earnPointKeys = earnedPointReader.earnPointKeyByEarnedPointId(sources.values());
+        Map<Long, String> usePointKeys = usePointKeysOf(usages);
 
         List<OrderUsageDetail> details = usages.stream()
                 .map(usage -> {
-                    PointLot lot = lots.get(usage.getLotId());
+                    EarnedPoint source = sources.get(usage.getEarnedPointId());
                     return new OrderUsageDetail(
                             usePointKeys.get(usage.getUseTransactionId()),
-                            earnPointKeys.get(lot.getTransactionId()),
+                            earnPointKeys.get(source.getId()),
                             usage.getAmount(),
                             usage.getCanceledAmount(),
-                            lot.isManual(),
-                            lot.getExpireAt());
+                            source.isManual(),
+                            source.getExpireAt());
                 })
                 .toList();
 
-        long usedAmount = usages.stream().mapToLong(PointLotUsage::getAmount).sum();
-        long canceledAmount = usages.stream().mapToLong(PointLotUsage::getCanceledAmount).sum();
-        return new OrderUsageResult(orderId, usedAmount, canceledAmount, details);
+        return new OrderUsageResult(
+                orderId,
+                usages.stream().mapToLong(PointUsage::getAmount).sum(),
+                usages.stream().mapToLong(PointUsage::getCanceledAmount).sum(),
+                details);
     }
 
-    private Map<Long, String> pointKeysOf(Iterable<PointLot> lots) {
-        List<Long> transactionIds = new ArrayList<>();
-        lots.forEach(lot -> transactionIds.add(lot.getTransactionId()));
+    private long sumUsable(List<EarnedPoint> earnedPoints, LocalDateTime now, boolean manualOnly) {
+        return earnedPoints.stream()
+                .filter(earnedPoint -> earnedPoint.isUsableAt(now))
+                .filter(earnedPoint -> !manualOnly || earnedPoint.isManual())
+                .mapToLong(EarnedPoint::getRemainingAmount)
+                .sum();
+    }
+
+    private List<EarnedPointSummary> toSummaries(List<EarnedPoint> earnedPoints,
+                                                 Map<Long, String> earnPointKeys,
+                                                 LocalDateTime now) {
+        return earnedPoints.stream()
+                .map(earnedPoint -> new EarnedPointSummary(
+                        earnPointKeys.get(earnedPoint.getId()),
+                        earnedPoint.getOriginalAmount(),
+                        earnedPoint.getRemainingAmount(),
+                        earnedPoint.isManual(),
+                        displayStatusOf(earnedPoint, now),
+                        earnedPoint.getExpireAt()))
+                .toList();
+    }
+
+    private Map<Long, String> usePointKeysOf(List<PointUsage> usages) {
+        List<Long> transactionIds = usages.stream()
+                .map(PointUsage::getUseTransactionId)
+                .distinct()
+                .toList();
         if (transactionIds.isEmpty()) {
             return Map.of();
         }
@@ -113,10 +116,9 @@ public class PointQueryService {
                 .collect(Collectors.toMap(PointTransaction::getId, PointTransaction::getPointKey));
     }
 
-    private String displayStatus(PointLot lot, LocalDateTime now) {
-        if (lot.getStatus() == PointLotStatus.AVAILABLE && !lot.getExpireAt().isAfter(now)) {
-            return PointLotStatus.EXPIRED.name();
-        }
-        return lot.getStatus().name();
+    private String displayStatusOf(EarnedPoint earnedPoint, LocalDateTime now) {
+        return earnedPoint.isExpiredAt(now)
+                ? EarnedPointStatus.EXPIRED.name()
+                : earnedPoint.getStatus().name();
     }
 }
