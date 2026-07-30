@@ -80,11 +80,13 @@
 | `point_transaction` | **pointKey를 부여받는 모든 거래 이벤트**. EARN / EARN_CANCEL / USE / USE_CANCEL |
 | `earned_point` | EARN 거래와 1:1. `remaining_amount`, `expire_at`, `manual`, `status` 보유. **잔액의 유일한 원천** |
 | `point_usage` | 사용 상세. "어떤 사용거래가 어떤 적립분을 어떤 주문에서 얼마 썼는가" — 1원 단위 추적의 핵심 |
-| `point_usage_cancellation` | 사용취소 상세. 복원(`restored_earned_point_id`)과 만료 재적립(`reissued_earned_point_id`)을 구분 기록 |
+| `point_usage_cancellation` | 사용취소 상세. 어느 적립분으로 돌아갔는지, 만료로 새로 적립했는지 기록 |
 | `user_point_lock` | **잔액 컬럼 없음.** 사용자 단위 락(`SELECT ... FOR UPDATE`) 대상으로만 존재 |
 | `point_policy` | 단일 행. 런타임에 변경 가능한 정책값 |
 
 `earned_point.status` 는 `AVAILABLE` / `EXPIRED` / `CANCELED` 3가지입니다. 잔액이 0이 되는 것은 상태 전이가 아니라 `remaining_amount` 값 변화로만 표현해, 상태 머신을 단순하게 유지했습니다.
+
+`point_usage` / `point_usage_cancellation` 은 **조회 전용 원장 행**입니다. 그래서 응답에 필요한 값(`earned_point_key`, `earned_point_manual`, `earned_point_expire_at` 등)을 거래 시점 그대로 담습니다. 전부 `earned_point` 의 불변 컬럼을 복사한 것이라 원본과 어긋날 수 없고, 대신 사용/취소 상세 조회가 조인 없이 한 번에 끝납니다. ERD에서 갈색으로 표시한 컬럼들입니다.
 
 DDL과 인덱스는 [`src/main/resources/db/schema.sql`](src/main/resources/db/schema.sql) 에 있습니다.
 
@@ -147,7 +149,38 @@ curl -X PUT http://localhost:8080/api/v1/admin/points/policies \
 
 수동 실행: `POST /api/v1/admin/points/expirations`
 
-### 5-6. 멱등성은 락 안에서 판정한다
+### 5-6. 읽는 순서가 곧 처리 순서
+
+공개 메서드 네 개는 모두 같은 모양입니다. 위에서 아래로 읽으면 무슨 일이 일어나는지 다 드러나고, 궁금한 단계만 펼쳐 보면 됩니다.
+
+```java
+@Transactional
+public UseResult use(UseCommand command) {
+    userPointLocker.lock(command.userId());
+
+    Optional<PointTransaction> alreadyUsed =
+            idempotencyGuard.findHandled(command.userId(), command.requestKey(), USE);
+    if (alreadyUsed.isPresent()) {
+        return toUseResult(alreadyUsed.get());
+    }
+    return deductPoints(command);
+}
+```
+
+세부 단계 이름은 도메인 언어를 그대로 씁니다 — `grantPoints`, `takeBackPoints`, `deductInPriorityOrder`, `restoreInUsedOrder`, `giveBack`, `reissue`. 메서드 이름만 훑어도 "적립분을 우선순위 순으로 차감한다", "사용된 순서대로 되돌려준다"가 읽힙니다.
+
+조회 헬퍼는 `EarnedPointReader` / `PointTransactionReader` 두 곳에 모았습니다. 두 서비스에 같은 `findTransaction` 이 중복돼 있던 것을 없애고, 서비스에는 흐름만 남겼습니다.
+
+객체를 만들 때는 위치 인자 대신 관련 엔티티를 넘깁니다.
+
+```java
+EarnedPoint.from(earnTransaction, manual, expireAt, now)
+PointUsage.of(useTransaction, source, amount, now)
+```
+
+`of(userId, EARN, amount, null, null, requestKey, memo, now)` 처럼 null 이 늘어서면 몇 번째가 무엇인지 알 수 없습니다. 엔티티를 넘기면 필요한 값은 그 안에서 꺼내므로 인자가 줄고 뜻이 분명해집니다.
+
+### 5-7. 멱등성은 락 안에서 판정한다
 
 네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다. 그래서 재시도한 클라이언트도 같은 `pointKey` 를 받습니다.
 
@@ -176,7 +209,7 @@ public UseResult use(UseCommand command) {
 
 전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
 
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [5-6](#5-6-멱등성은-락-안에서-판정한다) 참고.
+네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [5-7](#5-7-멱등성은-락-안에서-판정한다) 참고.
 
 ### 포인트
 
@@ -330,7 +363,7 @@ src/main/java/com/musinsa/payments/point/
 ├── domain/               엔티티. 검증과 상태 전이 규칙이 여기 있음
 │   ├── PointTransaction        pointKey 부여 대상. requestKey 보유
 │   ├── EarnedPoint             적립 단위. deduct/restore/cancel/expire
-│   ├── PointUsage              사용 상세. cancelableAmount/cancel
+│   ├── PointUsage              사용 상세 (조회 전용 원장 행)
 │   ├── PointUsageCancellation  사용취소 상세 (복원 / 재적립 구분)
 │   ├── UserPointLock           사용자 단위 락 대상
 │   └── PointPolicy             정책값과 정책 검증
@@ -344,16 +377,17 @@ src/main/java/com/musinsa/payments/point/
 │   ├── ExpiredPointMarker      청크 단위 트랜잭션
 │   ├── UserPointLocker         사용자 단위 직렬화
 │   ├── PointIdempotencyGuard   requestKey 중복 판정
-│   ├── EarnedPointReader       적립분·잔액·pointKey 일괄 조회
+│   ├── EarnedPointReader       적립분·잔액 조회
+│   ├── PointTransactionReader  거래 조회와 종류 검증
 │   └── dto/                    커맨드 / 결과 record
 └── support/error/        에러 코드, 예외, 전역 핸들러
 ```
 
 금액 계산 규칙과 상태 전이 조건은 서비스가 아니라 **엔티티 안**에 있습니다. 잘못된 차감·복원은 서비스 어디서 호출하든 엔티티에서 막힙니다.
 
-공개 비즈니스 메서드는 모두 같은 세 줄로 읽힙니다 — **락 → 멱등성 판정 → 실제 처리**. 세부 단계는 도메인 용어를 그대로 쓴 private 메서드(`grantPoints`, `deductInPriorityOrder`, `restoreOrReissue`)로 내려, 위에서 아래로 읽으면 흐름이 드러나고 궁금한 단계만 펼쳐 보면 되게 했습니다.
+공개 비즈니스 메서드는 모두 같은 세 줄로 읽힙니다 — **락 → 멱등성 판정 → 실제 처리**. 자세한 내용은 [5-6](#5-6-읽는-순서가-곧-처리-순서) 에 정리했습니다.
 
-반복되던 잔액 합산·적립분 조회·pointKey 역참조는 `EarnedPointReader` 로 모았습니다. 사용 상세를 만들 때 적립분마다 거래를 한 건씩 조회하던 N+1도 이 과정에서 한 번의 일괄 조회로 바뀌었습니다.
+주석은 두지 않았습니다. 이름으로 설명되지 않는 코드가 있으면 이름을 고쳤습니다.
 
 ---
 

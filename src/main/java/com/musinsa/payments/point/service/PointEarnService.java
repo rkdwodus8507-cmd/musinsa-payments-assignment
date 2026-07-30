@@ -14,6 +14,7 @@ import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,7 @@ public class PointEarnService {
     private final EarnedPointReader earnedPointReader;
     private final PointPolicyService policyService;
     private final UserPointLocker userPointLocker;
+    private final PointTransactionReader transactionReader;
     private final PointIdempotencyGuard idempotencyGuard;
     private final Clock clock;
 
@@ -34,19 +36,25 @@ public class PointEarnService {
     public EarnResult earn(EarnCommand command) {
         userPointLocker.lock(command.userId());
 
-        return idempotencyGuard.findHandled(command.userId(), command.requestKey(), PointTransactionType.EARN)
-                .map(this::toEarnResult)
-                .orElseGet(() -> grantPoints(command));
+        Optional<PointTransaction> alreadyEarned =
+                idempotencyGuard.findHandled(command.userId(), command.requestKey(), PointTransactionType.EARN);
+        if (alreadyEarned.isPresent()) {
+            return toEarnResult(alreadyEarned.get());
+        }
+        return grantPoints(command);
     }
 
     @Transactional
     public EarnCancelResult cancelEarn(CancelEarnCommand command) {
-        PointTransaction earnTransaction = findEarnTransaction(command.earnPointKey());
+        PointTransaction earnTransaction = transactionReader.earnByPointKey(command.earnPointKey());
         userPointLocker.lock(earnTransaction.getUserId());
 
-        return idempotencyGuard.findHandled(earnTransaction.getUserId(), command.requestKey(), PointTransactionType.EARN_CANCEL)
-                .map(this::toEarnCancelResult)
-                .orElseGet(() -> takeBackPoints(earnTransaction, command.requestKey()));
+        Optional<PointTransaction> alreadyCanceled = idempotencyGuard.findHandled(
+                earnTransaction.getUserId(), command.requestKey(), PointTransactionType.EARN_CANCEL);
+        if (alreadyCanceled.isPresent()) {
+            return toEarnCancelResult(alreadyCanceled.get());
+        }
+        return takeBackPoints(earnTransaction, command.requestKey());
     }
 
     private EarnResult grantPoints(EarnCommand command) {
@@ -57,12 +65,11 @@ public class PointEarnService {
         policy.validateBalanceAfterEarn(earnedPointReader.balanceOf(command.userId()), command.amount());
         LocalDateTime expireAt = now.plusDays(policy.resolveExpireDays(command.expireDays()));
 
-        PointTransaction transaction = transactionRepository.save(PointTransaction.earn(
+        PointTransaction earnTransaction = transactionRepository.save(PointTransaction.earn(
                 command.userId(), command.amount(), command.memo(), command.requestKey(), now));
-        earnedPointRepository.save(EarnedPoint.of(
-                transaction.getId(), command.userId(), command.amount(), command.manual(), expireAt, now));
+        earnedPointRepository.save(EarnedPoint.from(earnTransaction, command.manual(), expireAt, now));
 
-        return toEarnResult(transaction);
+        return toEarnResult(earnTransaction);
     }
 
     private EarnCancelResult takeBackPoints(PointTransaction earnTransaction, String requestKey) {
@@ -71,7 +78,7 @@ public class PointEarnService {
         earnedPoint.cancel(now);
 
         PointTransaction cancelTransaction = transactionRepository.save(PointTransaction.earnCancel(
-                earnTransaction.getUserId(), earnedPoint.getOriginalAmount(), earnTransaction.getId(), requestKey, now));
+                earnTransaction, earnedPoint.getOriginalAmount(), requestKey, now));
 
         return toEarnCancelResult(cancelTransaction);
     }
@@ -88,7 +95,7 @@ public class PointEarnService {
     }
 
     private EarnCancelResult toEarnCancelResult(PointTransaction cancelTransaction) {
-        PointTransaction earnTransaction = findTransaction(cancelTransaction.getRelatedTransactionId());
+        PointTransaction earnTransaction = transactionReader.byId(cancelTransaction.getRelatedTransactionId());
         return new EarnCancelResult(
                 cancelTransaction.getPointKey(),
                 earnTransaction.getPointKey(),
@@ -97,17 +104,4 @@ public class PointEarnService {
                 earnedPointReader.balanceOf(cancelTransaction.getUserId()));
     }
 
-    private PointTransaction findEarnTransaction(String pointKey) {
-        PointTransaction transaction = transactionRepository.findByPointKey(pointKey)
-                .orElseThrow(() -> PointException.of(ErrorCode.TRANSACTION_NOT_FOUND, "pointKey=" + pointKey));
-        if (!transaction.isEarn()) {
-            throw PointException.of(ErrorCode.NOT_EARN_TRANSACTION, "type=" + transaction.getType());
-        }
-        return transaction;
-    }
-
-    private PointTransaction findTransaction(Long transactionId) {
-        return transactionRepository.findById(transactionId)
-                .orElseThrow(() -> PointException.of(ErrorCode.TRANSACTION_NOT_FOUND, "transactionId=" + transactionId));
-    }
 }

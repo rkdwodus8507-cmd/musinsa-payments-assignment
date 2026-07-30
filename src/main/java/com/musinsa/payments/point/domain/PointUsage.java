@@ -26,8 +26,20 @@ public class PointUsage {
     @Column(nullable = false, updatable = false)
     private Long useTransactionId;
 
+    @Column(nullable = false, updatable = false, length = 36)
+    private String usePointKey;
+
     @Column(nullable = false, updatable = false)
     private Long earnedPointId;
+
+    @Column(nullable = false, updatable = false, length = 36)
+    private String earnedPointKey;
+
+    @Column(nullable = false, updatable = false)
+    private boolean earnedPointManual;
+
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime earnedPointExpireAt;
 
     @Column(nullable = false, updatable = false, length = 64)
     private String orderId;
@@ -41,15 +53,15 @@ public class PointUsage {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public static PointUsage of(Long useTransactionId,
-                                Long earnedPointId,
-                                String orderId,
-                                long amount,
-                                LocalDateTime now) {
+    public static PointUsage of(PointTransaction useTransaction, EarnedPoint source, long amount, LocalDateTime now) {
         PointUsage usage = new PointUsage();
-        usage.useTransactionId = useTransactionId;
-        usage.earnedPointId = earnedPointId;
-        usage.orderId = orderId;
+        usage.useTransactionId = useTransaction.getId();
+        usage.usePointKey = useTransaction.getPointKey();
+        usage.earnedPointId = source.getId();
+        usage.earnedPointKey = source.getPointKey();
+        usage.earnedPointManual = source.isManual();
+        usage.earnedPointExpireAt = source.getExpireAt();
+        usage.orderId = useTransaction.getOrderId();
         usage.amount = amount;
         usage.canceledAmount = 0;
         usage.createdAt = now;

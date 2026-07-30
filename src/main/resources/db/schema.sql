@@ -52,6 +52,7 @@ create table earned_point
 (
     id               bigint auto_increment not null,
     transaction_id   bigint               not null,
+    point_key        varchar(36)          not null,
     user_id          bigint               not null,
     original_amount  bigint               not null,
     remaining_amount bigint               not null,
@@ -68,13 +69,17 @@ create index idx_earned_point_expiration on earned_point (status, expire_at);
 
 create table point_usage
 (
-    id                 bigint auto_increment not null,
-    use_transaction_id bigint               not null,
-    earned_point_id    bigint               not null,
-    order_id           varchar(64)          not null,
-    amount             bigint               not null,
-    canceled_amount    bigint               not null,
-    created_at         timestamp            not null,
+    id                      bigint auto_increment not null,
+    use_transaction_id      bigint               not null,
+    use_point_key           varchar(36)          not null,
+    earned_point_id         bigint               not null,
+    earned_point_key        varchar(36)          not null,
+    earned_point_manual     boolean              not null,
+    earned_point_expire_at  timestamp            not null,
+    order_id                varchar(64)          not null,
+    amount                  bigint               not null,
+    canceled_amount         bigint               not null,
+    created_at              timestamp            not null,
     primary key (id)
 );
 
@@ -88,8 +93,11 @@ create table point_usage_cancellation
     cancel_transaction_id    bigint               not null,
     point_usage_id           bigint               not null,
     amount                   bigint               not null,
-    restored_earned_point_id bigint,
+    source_earned_point_id   bigint               not null,
+    source_point_key         varchar(36)          not null,
     reissued_earned_point_id bigint,
+    reissued_point_key       varchar(36),
+    expire_at                timestamp            not null,
     created_at               timestamp            not null,
     primary key (id)
 );

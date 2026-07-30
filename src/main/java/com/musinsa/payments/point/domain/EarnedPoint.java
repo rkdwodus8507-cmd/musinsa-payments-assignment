@@ -28,6 +28,9 @@ public class EarnedPoint {
     @Column(nullable = false, updatable = false)
     private Long transactionId;
 
+    @Column(nullable = false, updatable = false, length = 36)
+    private String pointKey;
+
     @Column(nullable = false, updatable = false)
     private Long userId;
 
@@ -50,17 +53,13 @@ public class EarnedPoint {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public static EarnedPoint of(Long transactionId,
-                                 Long userId,
-                                 long amount,
-                                 boolean manual,
-                                 LocalDateTime expireAt,
-                                 LocalDateTime now) {
+    public static EarnedPoint from(PointTransaction earnTransaction, boolean manual, LocalDateTime expireAt, LocalDateTime now) {
         EarnedPoint earnedPoint = new EarnedPoint();
-        earnedPoint.transactionId = transactionId;
-        earnedPoint.userId = userId;
-        earnedPoint.originalAmount = amount;
-        earnedPoint.remainingAmount = amount;
+        earnedPoint.transactionId = earnTransaction.getId();
+        earnedPoint.pointKey = earnTransaction.getPointKey();
+        earnedPoint.userId = earnTransaction.getUserId();
+        earnedPoint.originalAmount = earnTransaction.getAmount();
+        earnedPoint.remainingAmount = earnTransaction.getAmount();
         earnedPoint.manual = manual;
         earnedPoint.status = EarnedPointStatus.AVAILABLE;
         earnedPoint.expireAt = expireAt;
@@ -72,12 +71,12 @@ public class EarnedPoint {
         return status == EarnedPointStatus.EXPIRED || !expireAt.isAfter(at);
     }
 
-    public boolean isUsableAt(LocalDateTime at) {
-        return isAvailableAt(at) && remainingAmount > 0;
+    public boolean canBeUsedAt(LocalDateTime at) {
+        return isAliveAt(at) && remainingAmount > 0;
     }
 
-    public boolean isRestorableAt(LocalDateTime at) {
-        return isAvailableAt(at);
+    public boolean canBeRestoredAt(LocalDateTime at) {
+        return isAliveAt(at);
     }
 
     public void deduct(long amount) {
@@ -103,7 +102,7 @@ public class EarnedPoint {
         if (isExpiredAt(now)) {
             throw PointException.of(ErrorCode.EARN_ALREADY_EXPIRED);
         }
-        if (isPartiallyUsed()) {
+        if (remainingAmount != originalAmount) {
             throw PointException.of(ErrorCode.EARN_PARTIALLY_USED,
                     "적립: %d, 잔액: %d".formatted(originalAmount, remainingAmount));
         }
@@ -117,11 +116,7 @@ public class EarnedPoint {
         }
     }
 
-    private boolean isAvailableAt(LocalDateTime at) {
+    private boolean isAliveAt(LocalDateTime at) {
         return status == EarnedPointStatus.AVAILABLE && expireAt.isAfter(at);
-    }
-
-    private boolean isPartiallyUsed() {
-        return remainingAmount != originalAmount;
     }
 }

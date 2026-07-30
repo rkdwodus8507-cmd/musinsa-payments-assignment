@@ -30,30 +30,44 @@ public class PointUsageCancellation {
     @Column(nullable = false, updatable = false)
     private long amount;
 
-    private Long restoredEarnedPointId;
+    @Column(nullable = false, updatable = false)
+    private Long sourceEarnedPointId;
 
+    @Column(nullable = false, updatable = false, length = 36)
+    private String sourcePointKey;
+
+    @Column(updatable = false)
     private Long reissuedEarnedPointId;
+
+    @Column(updatable = false, length = 36)
+    private String reissuedPointKey;
+
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime expireAt;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public static PointUsageCancellation restored(Long cancelTransactionId,
-                                                  Long pointUsageId,
+    public static PointUsageCancellation restored(PointTransaction cancelTransaction,
+                                                  PointUsage usage,
+                                                  EarnedPoint source,
                                                   long amount,
-                                                  Long restoredEarnedPointId,
                                                   LocalDateTime now) {
-        PointUsageCancellation cancellation = of(cancelTransactionId, pointUsageId, amount, now);
-        cancellation.restoredEarnedPointId = restoredEarnedPointId;
+        PointUsageCancellation cancellation = newCancellation(cancelTransaction, usage, source, amount, now);
+        cancellation.expireAt = source.getExpireAt();
         return cancellation;
     }
 
-    public static PointUsageCancellation reissued(Long cancelTransactionId,
-                                                  Long pointUsageId,
+    public static PointUsageCancellation reissued(PointTransaction cancelTransaction,
+                                                  PointUsage usage,
+                                                  EarnedPoint source,
+                                                  EarnedPoint reissued,
                                                   long amount,
-                                                  Long reissuedEarnedPointId,
                                                   LocalDateTime now) {
-        PointUsageCancellation cancellation = of(cancelTransactionId, pointUsageId, amount, now);
-        cancellation.reissuedEarnedPointId = reissuedEarnedPointId;
+        PointUsageCancellation cancellation = newCancellation(cancelTransaction, usage, source, amount, now);
+        cancellation.reissuedEarnedPointId = reissued.getId();
+        cancellation.reissuedPointKey = reissued.getPointKey();
+        cancellation.expireAt = reissued.getExpireAt();
         return cancellation;
     }
 
@@ -61,14 +75,17 @@ public class PointUsageCancellation {
         return reissuedEarnedPointId != null;
     }
 
-    private static PointUsageCancellation of(Long cancelTransactionId,
-                                             Long pointUsageId,
-                                             long amount,
-                                             LocalDateTime now) {
+    private static PointUsageCancellation newCancellation(PointTransaction cancelTransaction,
+                                                          PointUsage usage,
+                                                          EarnedPoint source,
+                                                          long amount,
+                                                          LocalDateTime now) {
         PointUsageCancellation cancellation = new PointUsageCancellation();
-        cancellation.cancelTransactionId = cancelTransactionId;
-        cancellation.pointUsageId = pointUsageId;
+        cancellation.cancelTransactionId = cancelTransaction.getId();
+        cancellation.pointUsageId = usage.getId();
         cancellation.amount = amount;
+        cancellation.sourceEarnedPointId = source.getId();
+        cancellation.sourcePointKey = source.getPointKey();
         cancellation.createdAt = now;
         return cancellation;
     }
