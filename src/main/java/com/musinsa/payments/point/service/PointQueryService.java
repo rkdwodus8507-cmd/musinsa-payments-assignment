@@ -59,9 +59,17 @@ public class PointQueryService {
 
         return new OrderUsageResult(
                 orderId,
-                usages.stream().mapToLong(PointUsage::getAmount).sum(),
-                usages.stream().mapToLong(PointUsage::getCanceledAmount).sum(),
+                sumUsedAmount(usages),
+                sumCanceledAmount(usages),
                 toOrderUsageDetails(usages));
+    }
+
+    private long sumUsedAmount(List<PointUsage> usages) {
+        return usages.stream().mapToLong(PointUsage::getAmount).sum();
+    }
+
+    private long sumCanceledAmount(List<PointUsage> usages) {
+        return usages.stream().mapToLong(PointUsage::getCanceledAmount).sum();
     }
 
     private List<OrderUsageDetail> toOrderUsageDetails(List<PointUsage> usages) {

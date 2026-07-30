@@ -228,11 +228,11 @@ private UseResult deductPoints(UseCommand command) {
 | `restoreUsedPoints` | 11 → 7줄 | 2 → 0 |
 | `toUseResult` | 14 → 7줄 | 1 → 0 |
 | `toUseCancelResult` | 19 → 10줄 | 1 → 0 |
-| `getOrderUsage` | 15 → 6줄 | 3 → 2 |
+| `getOrderUsage` | 15 → 6줄 | 3 → 0 |
 
 `validateEnoughToUse`, `validateCancelable`, `toUsedDetails`, `toCanceledDetails`, `toOrderUsageDetails` 가 새로 생긴 단계들입니다. 검증 규칙에 이름이 붙어서 "쓸 수 있는지 확인한다", "취소할 수 있는지 확인한다"로 읽힙니다.
 
-`deductInPriorityOrder` / `restoreInUsedOrder` 는 `Math.min` 과 루프가 남아 있지만 그게 알고리즘 본체이므로 그대로 뒀습니다. `getOrderUsage` 도 합산 두 줄이 남았는데, 빼내려면 1줄짜리 메서드 두 개가 생겨서 두지 않았습니다.
+`deductInPriorityOrder` / `restoreInUsedOrder` 는 `Math.min` 과 루프가 남아 있지만 그게 알고리즘 본체이므로 그대로 뒀습니다.
 
 세부 단계 이름은 도메인 언어를 그대로 씁니다 — `grantPoints`, `takeBackPoints`, `deductInPriorityOrder`, `restoreInUsedOrder`, `giveBack`, `reissue`. 메서드 이름만 훑어도 "적립분을 우선순위 순으로 차감한다", "사용된 순서대로 되돌려준다"가 읽힙니다.
 
