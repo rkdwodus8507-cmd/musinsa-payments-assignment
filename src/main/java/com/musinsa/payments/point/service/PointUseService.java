@@ -21,6 +21,8 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -99,8 +101,7 @@ public class PointUseService {
     }
 
     private void restoreInUsedOrder(List<PointUsage> usages, PointTransaction cancelTransaction, LocalDateTime now) {
-        Map<Long, EarnedPoint> sources = earnedPointReader.byIds(
-                usages.stream().map(PointUsage::getEarnedPointId).distinct().toList());
+        Map<Long, EarnedPoint> sources = sourcesOf(usages);
 
         long remaining = cancelTransaction.getAmount();
         for (PointUsage usage : usages) {
@@ -183,24 +184,60 @@ public class PointUseService {
     }
 
     private List<UsedPointDetail> toUsedDetails(List<PointUsage> usages) {
+        Map<Long, EarnedPoint> sources = sourcesOf(usages);
+        Map<Long, String> earnPointKeys = transactionReader.earnPointKeysByEarnedPointId(sources.values());
+
         return usages.stream()
-                .map(usage -> new UsedPointDetail(
-                        usage.getEarnedPointKey(),
-                        usage.getAmount(),
-                        usage.isEarnedPointManual(),
-                        usage.getEarnedPointExpireAt()))
+                .map(usage -> {
+                    EarnedPoint source = sources.get(usage.getEarnedPointId());
+                    return new UsedPointDetail(
+                            earnPointKeys.get(source.getId()),
+                            usage.getAmount(),
+                            source.isManual(),
+                            source.getExpireAt());
+                })
                 .toList();
     }
 
     private List<CanceledPointDetail> toCanceledDetails(PointTransaction cancelTransaction) {
-        return cancellationRepository.findByCancelTransactionIdOrderByIdAsc(cancelTransaction.getId()).stream()
-                .map(cancellation -> new CanceledPointDetail(
-                        cancellation.getSourcePointKey(),
-                        cancellation.getAmount(),
-                        cancellation.isReissued(),
-                        cancellation.getReissuedPointKey(),
-                        cancellation.getExpireAt()))
+        List<PointUsageCancellation> cancellations =
+                cancellationRepository.findByCancelTransactionIdOrderByIdAsc(cancelTransaction.getId());
+        Map<Long, EarnedPoint> earnedPoints = earnedPointReader.byIds(referencedEarnedPointIds(cancellations));
+        Map<Long, String> earnPointKeys = transactionReader.earnPointKeysByEarnedPointId(earnedPoints.values());
+
+        return cancellations.stream()
+                .map(cancellation -> toCanceledDetail(cancellation, earnedPoints, earnPointKeys))
                 .toList();
+    }
+
+    private CanceledPointDetail toCanceledDetail(PointUsageCancellation cancellation,
+                                                 Map<Long, EarnedPoint> earnedPoints,
+                                                 Map<Long, String> earnPointKeys) {
+        EarnedPoint source = earnedPoints.get(cancellation.getSourceEarnedPointId());
+        EarnedPoint reissued = cancellation.isReissued()
+                ? earnedPoints.get(cancellation.getReissuedEarnedPointId())
+                : null;
+
+        return new CanceledPointDetail(
+                earnPointKeys.get(source.getId()),
+                cancellation.getAmount(),
+                cancellation.isReissued(),
+                reissued == null ? null : earnPointKeys.get(reissued.getId()),
+                reissued == null ? source.getExpireAt() : reissued.getExpireAt());
+    }
+
+    private List<Long> referencedEarnedPointIds(List<PointUsageCancellation> cancellations) {
+        return cancellations.stream()
+                .flatMap(cancellation -> Stream.of(
+                        cancellation.getSourceEarnedPointId(), cancellation.getReissuedEarnedPointId()))
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    private Map<Long, EarnedPoint> sourcesOf(List<PointUsage> usages) {
+        return earnedPointReader.byIds(
+                usages.stream().map(PointUsage::getEarnedPointId).distinct().toList());
     }
 
     private List<PointUsage> usagesOf(PointTransaction useTransaction) {

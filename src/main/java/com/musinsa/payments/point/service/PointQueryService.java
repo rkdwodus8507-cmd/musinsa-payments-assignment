@@ -13,6 +13,7 @@ import com.musinsa.payments.point.service.dto.TransactionResult;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PointQueryService {
 
     private final PointTransactionRepository transactionRepository;
+    private final PointTransactionReader transactionReader;
     private final PointUsageRepository usageRepository;
     private final EarnedPointReader earnedPointReader;
     private final Clock clock;
@@ -73,14 +75,23 @@ public class PointQueryService {
     }
 
     private List<OrderUsageDetail> toOrderUsageDetails(List<PointUsage> usages) {
+        Map<Long, EarnedPoint> sources = earnedPointReader.byIds(
+                usages.stream().map(PointUsage::getEarnedPointId).distinct().toList());
+        Map<Long, String> earnPointKeys = transactionReader.earnPointKeysByEarnedPointId(sources.values());
+        Map<Long, String> usePointKeys = transactionReader.pointKeysByTransactionId(
+                usages.stream().map(PointUsage::getUseTransactionId).toList());
+
         return usages.stream()
-                .map(usage -> new OrderUsageDetail(
-                        usage.getUsePointKey(),
-                        usage.getEarnedPointKey(),
-                        usage.getAmount(),
-                        usage.getCanceledAmount(),
-                        usage.isEarnedPointManual(),
-                        usage.getEarnedPointExpireAt()))
+                .map(usage -> {
+                    EarnedPoint source = sources.get(usage.getEarnedPointId());
+                    return new OrderUsageDetail(
+                            usePointKeys.get(usage.getUseTransactionId()),
+                            earnPointKeys.get(source.getId()),
+                            usage.getAmount(),
+                            usage.getCanceledAmount(),
+                            source.isManual(),
+                            source.getExpireAt());
+                })
                 .toList();
     }
 
@@ -89,9 +100,11 @@ public class PointQueryService {
     }
 
     private List<EarnedPointSummary> toSummaries(List<EarnedPoint> earnedPoints, LocalDateTime now) {
+        Map<Long, String> earnPointKeys = transactionReader.earnPointKeysByEarnedPointId(earnedPoints);
+
         return earnedPoints.stream()
                 .map(earnedPoint -> new EarnedPointSummary(
-                        earnedPoint.getPointKey(),
+                        earnPointKeys.get(earnedPoint.getId()),
                         earnedPoint.getOriginalAmount(),
                         earnedPoint.getRemainingAmount(),
                         earnedPoint.isManual(),

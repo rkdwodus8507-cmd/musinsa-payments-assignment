@@ -10,7 +10,6 @@
       .tnote { font-size: 11px; fill: #e6edf3; }
       .col { font-size: 12px; fill: #22303c; }
       .colpk { font-size: 12px; font-weight: 700; fill: #0b4f6c; }
-      .colsnap { font-size: 12px; fill: #7a5c00; }
       .type { font-size: 11px; fill: #78899a; }
       .rel { font-size: 11.5px; fill: #5b6b7c; font-style: italic; }
       .legend { font-size: 12px; fill: #3c4a58; }
@@ -25,7 +24,7 @@
 
   <rect width="1230" height="1010" fill="#f6f8fa"/>
   <text x="40" y="46" class="title">무료 포인트 시스템 ERD</text>
-  <text x="40" y="70" class="subtitle">잔액 = SUM(earned_point.remaining_amount) WHERE status='AVAILABLE' AND expire_at &gt; now() · 갈색 컬럼은 조회 전용 스냅샷</text>
+  <text x="40" y="70" class="subtitle">잔액 = SUM(earned_point.remaining_amount) WHERE status='AVAILABLE' AND expire_at &gt; now() · 정규화 유지, 조회는 일괄(batch) 조회로 해결</text>
 
   <!-- point_policy -->
   <g>
@@ -75,46 +74,41 @@
 
   <!-- earned_point -->
   <g>
-    <rect x="420" y="460" width="310" height="270" rx="8" class="box"/>
+    <rect x="420" y="460" width="310" height="251" rx="8" class="box"/>
     <path d="M420 468 a8 8 0 0 1 8 -8 h294 a8 8 0 0 1 8 8 v30 h-310 z" class="hdr-earn"/>
     <text x="436" y="482" class="tname">earned_point</text>
     <text x="436" y="495" class="tnote">EARN 거래와 1:1. 잔액의 유일한 원천</text>
     <text x="436" y="520" class="colpk">PK  id</text><text x="656" y="520" class="type">bigint</text>
     <text x="436" y="539" class="colpk">UK,FK  transaction_id</text><text x="656" y="539" class="type">bigint</text>
-    <text x="436" y="558" class="colpk">point_key</text><text x="638" y="558" class="type">varchar(36)</text>
-    <text x="436" y="577" class="col">user_id</text><text x="656" y="577" class="type">bigint</text>
-    <text x="436" y="596" class="col">original_amount</text><text x="656" y="596" class="type">bigint</text>
-    <text x="436" y="615" class="col">remaining_amount</text><text x="656" y="615" class="type">bigint</text>
-    <text x="436" y="634" class="col">manual</text><text x="648" y="634" class="type">boolean</text>
-    <text x="436" y="653" class="col">status</text><text x="638" y="653" class="type">varchar(20)</text>
-    <text x="436" y="672" class="col">expire_at</text><text x="630" y="672" class="type">timestamp</text>
-    <text x="436" y="691" class="col">created_at</text><text x="630" y="691" class="type">timestamp</text>
-    <text x="436" y="715" class="rel">AVAILABLE / EXPIRED / CANCELED</text>
+    <text x="436" y="558" class="col">user_id</text><text x="656" y="558" class="type">bigint</text>
+    <text x="436" y="577" class="col">original_amount</text><text x="656" y="577" class="type">bigint</text>
+    <text x="436" y="596" class="col">remaining_amount</text><text x="656" y="596" class="type">bigint</text>
+    <text x="436" y="615" class="col">manual</text><text x="648" y="615" class="type">boolean</text>
+    <text x="436" y="634" class="col">status</text><text x="638" y="634" class="type">varchar(20)</text>
+    <text x="436" y="653" class="col">expire_at</text><text x="630" y="653" class="type">timestamp</text>
+    <text x="436" y="672" class="col">created_at</text><text x="630" y="672" class="type">timestamp</text>
+    <text x="436" y="696" class="rel">AVAILABLE / EXPIRED / CANCELED</text>
   </g>
 
   <!-- point_usage -->
   <g>
-    <rect x="850" y="160" width="340" height="290" rx="8" class="box"/>
+    <rect x="850" y="160" width="340" height="230" rx="8" class="box"/>
     <path d="M850 168 a8 8 0 0 1 8 -8 h324 a8 8 0 0 1 8 8 v30 h-340 z" class="hdr-use"/>
     <text x="866" y="182" class="tname">point_usage</text>
-    <text x="866" y="195" class="tnote">1원 단위 사용 추적. 조회 전용 원장 행</text>
+    <text x="866" y="195" class="tnote">1원 단위 사용 추적의 핵심</text>
     <text x="866" y="220" class="colpk">PK  id</text><text x="1110" y="220" class="type">bigint</text>
     <text x="866" y="239" class="colpk">FK  use_transaction_id</text><text x="1110" y="239" class="type">bigint</text>
-    <text x="866" y="258" class="colsnap">use_point_key</text><text x="1092" y="258" class="type">varchar(36)</text>
-    <text x="866" y="277" class="colpk">FK  earned_point_id</text><text x="1110" y="277" class="type">bigint</text>
-    <text x="866" y="296" class="colsnap">earned_point_key</text><text x="1092" y="296" class="type">varchar(36)</text>
-    <text x="866" y="315" class="colsnap">earned_point_manual</text><text x="1102" y="315" class="type">boolean</text>
-    <text x="866" y="334" class="colsnap">earned_point_expire_at</text><text x="1084" y="334" class="type">timestamp</text>
-    <text x="866" y="353" class="col">order_id</text><text x="1092" y="353" class="type">varchar(64)</text>
-    <text x="866" y="372" class="col">amount</text><text x="1110" y="372" class="type">bigint</text>
-    <text x="866" y="391" class="col">canceled_amount</text><text x="1110" y="391" class="type">bigint</text>
-    <text x="866" y="410" class="col">created_at</text><text x="1084" y="410" class="type">timestamp</text>
-    <text x="866" y="434" class="rel">"어떤 주문이 어떤 적립분을 얼마 썼는가"</text>
+    <text x="866" y="258" class="colpk">FK  earned_point_id</text><text x="1110" y="258" class="type">bigint</text>
+    <text x="866" y="277" class="col">order_id</text><text x="1092" y="277" class="type">varchar(64)</text>
+    <text x="866" y="296" class="col">amount</text><text x="1110" y="296" class="type">bigint</text>
+    <text x="866" y="315" class="col">canceled_amount</text><text x="1110" y="315" class="type">bigint</text>
+    <text x="866" y="334" class="col">created_at</text><text x="1084" y="334" class="type">timestamp</text>
+    <text x="866" y="374" class="rel">"어떤 주문이 어떤 적립분을 얼마 썼는가"</text>
   </g>
 
   <!-- point_usage_cancellation -->
   <g>
-    <rect x="850" y="490" width="340" height="272" rx="8" class="box"/>
+    <rect x="850" y="490" width="340" height="230" rx="8" class="box"/>
     <path d="M850 498 a8 8 0 0 1 8 -8 h324 a8 8 0 0 1 8 8 v30 h-340 z" class="hdr-use"/>
     <text x="866" y="512" class="tname">point_usage_cancellation</text>
     <text x="866" y="525" class="tnote">부분 사용취소가 여러 번 발생하므로 분리</text>
@@ -123,12 +117,9 @@
     <text x="866" y="588" class="colpk">FK  point_usage_id</text><text x="1110" y="588" class="type">bigint</text>
     <text x="866" y="607" class="col">amount</text><text x="1110" y="607" class="type">bigint</text>
     <text x="866" y="626" class="colpk">FK  source_earned_point_id</text><text x="1110" y="626" class="type">bigint</text>
-    <text x="866" y="645" class="colsnap">source_point_key</text><text x="1092" y="645" class="type">varchar(36)</text>
-    <text x="866" y="664" class="colpk">FK  reissued_earned_point_id</text><text x="1110" y="664" class="type">bigint</text>
-    <text x="866" y="683" class="colsnap">reissued_point_key</text><text x="1092" y="683" class="type">varchar(36)</text>
-    <text x="866" y="702" class="colsnap">expire_at</text><text x="1084" y="702" class="type">timestamp</text>
-    <text x="866" y="721" class="col">created_at</text><text x="1084" y="721" class="type">timestamp</text>
-    <text x="866" y="745" class="rel">복원 / 만료로 인한 재적립을 구분 기록</text>
+    <text x="866" y="645" class="colpk">FK  reissued_earned_point_id</text><text x="1110" y="645" class="type">bigint</text>
+    <text x="866" y="664" class="col">created_at</text><text x="1084" y="664" class="type">timestamp</text>
+    <text x="866" y="704" class="rel">복원 / 만료로 인한 재적립을 구분 기록</text>
   </g>
 
   <!-- relations -->
@@ -138,11 +129,11 @@
   <path d="M730 239 L850 239" class="line" marker-end="url(#arrow)"/>
   <text x="756" y="231" class="rel">1 : N (USE)</text>
 
-  <path d="M730 577 L790 577 L790 277 L850 277" class="line" marker-end="url(#arrow)"/>
-  <text x="736" y="595" class="rel">1 : N</text>
+  <path d="M730 558 L790 558 L790 258 L850 258" class="line" marker-end="url(#arrow)"/>
+  <text x="736" y="576" class="rel">1 : N</text>
 
-  <path d="M1020 450 L1020 490" class="line" marker-end="url(#arrow)"/>
-  <text x="1030" y="475" class="rel">1 : N</text>
+  <path d="M1020 390 L1020 490" class="line" marker-end="url(#arrow)"/>
+  <text x="1030" y="445" class="rel">1 : N</text>
 
   <path d="M730 303 L770 303 L770 100 L820 100 L820 569 L850 569" class="line" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
   <text x="826" y="92" class="rel">1 : N (USE_CANCEL)</text>
@@ -157,8 +148,8 @@
     <text x="16" y="50" class="legend">· 잔액 컬럼을 두지 않아 만료 배치 지연 시에도 캐시-실제값 불일치가 발생하지 않는다.</text>
     <text x="16" y="72" class="legend">· user_point_lock 은 잔액을 갖지 않고 SELECT ... FOR UPDATE 대상으로만 존재한다.</text>
     <text x="16" y="94" class="legend">· request_key 는 (user_id, request_key) 유니크. 재전송 시 기존 거래 결과를 그대로 돌려준다.</text>
-    <text x="16" y="116" class="legend">· 갈색 컬럼은 거래 시점의 사실을 그대로 담은 스냅샷이다. 모두 불변값이라 원본과 어긋날 수 없고,</text>
-    <text x="30" y="136" class="legend">사용/취소 상세 조회가 조인 없이 한 번에 끝난다.</text>
+    <text x="16" y="116" class="legend">· 값 복사(비정규화)는 두지 않는다. pointKey 는 point_transaction 에만 있고, 상세 응답은</text>
+    <text x="30" y="136" class="legend">id 목록으로 일괄 조회해 조립한다 — 적립분 수가 늘어도 조회 쿼리 수는 고정이다.</text>
     <text x="16" y="158" class="legend">· 적립분 사용 순서 인덱스: (user_id, status, manual DESC, expire_at ASC, id ASC)</text>
   </g>
 </svg>

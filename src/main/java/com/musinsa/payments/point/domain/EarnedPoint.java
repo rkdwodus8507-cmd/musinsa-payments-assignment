@@ -28,9 +28,6 @@ public class EarnedPoint {
     @Column(nullable = false, updatable = false)
     private Long transactionId;
 
-    @Column(nullable = false, updatable = false, length = 36)
-    private String pointKey;
-
     @Column(nullable = false, updatable = false)
     private Long userId;
 
@@ -56,7 +53,6 @@ public class EarnedPoint {
     public static EarnedPoint from(PointTransaction earnTransaction, boolean manual, LocalDateTime expireAt, LocalDateTime now) {
         EarnedPoint earnedPoint = new EarnedPoint();
         earnedPoint.transactionId = earnTransaction.getId();
-        earnedPoint.pointKey = earnTransaction.getPointKey();
         earnedPoint.userId = earnTransaction.getUserId();
         earnedPoint.originalAmount = earnTransaction.getAmount();
         earnedPoint.remainingAmount = earnTransaction.getAmount();

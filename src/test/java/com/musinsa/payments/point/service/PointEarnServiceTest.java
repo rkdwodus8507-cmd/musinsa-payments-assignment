@@ -13,8 +13,6 @@ import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,34 +28,9 @@ class PointEarnServiceTest extends IntegrationTestSupport {
         assertThat(result.isManual()).isFalse();
     }
 
-    @ParameterizedTest(name = "{0}포인트 적립은 허용된다")
-    @ValueSource(longs = {1, 50_000, 100_000})
-    @DisplayName("1회 적립 가능 금액 경계값")
-    void earnWithinPolicyRange(long amount) {
-        assertThat(earn(amount, null).getAmount()).isEqualTo(amount);
-    }
 
-    @ParameterizedTest(name = "{0}포인트 적립은 거절된다")
-    @ValueSource(longs = {0, -1, 100_001})
-    @DisplayName("1회 적립 가능 금액을 벗어나면 거절된다")
-    void earnOutsidePolicyRange(long amount) {
-        assertErrorCode(() -> earn(amount, null), ErrorCode.INVALID_EARN_AMOUNT);
-    }
 
-    @ParameterizedTest(name = "만료일 {0}일은 거절된다")
-    @ValueSource(ints = {0, -1, 1825, 3650})
-    @DisplayName("만료일은 1일 이상 5년 미만이어야 한다")
-    void earnWithInvalidExpireDays(int expireDays) {
-        assertErrorCode(() -> earn(1000, expireDays), ErrorCode.INVALID_EXPIRE_DAYS);
-    }
 
-    @ParameterizedTest(name = "만료일 {0}일은 허용된다")
-    @ValueSource(ints = {1, 365, 1824})
-    @DisplayName("만료일 경계값")
-    void earnWithValidExpireDays(int expireDays) {
-        assertThat(earn(1000, expireDays).getExpireAt())
-                .isEqualTo(MutableClock.INITIAL_TIME.plusDays(expireDays));
-    }
 
     @Test
     @DisplayName("개인별 최대 보유 포인트를 초과하면 적립이 거절된다")

@@ -33,17 +33,8 @@ public class PointUsageCancellation {
     @Column(nullable = false, updatable = false)
     private Long sourceEarnedPointId;
 
-    @Column(nullable = false, updatable = false, length = 36)
-    private String sourcePointKey;
-
     @Column(updatable = false)
     private Long reissuedEarnedPointId;
-
-    @Column(updatable = false, length = 36)
-    private String reissuedPointKey;
-
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime expireAt;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -53,9 +44,7 @@ public class PointUsageCancellation {
                                                   EarnedPoint source,
                                                   long amount,
                                                   LocalDateTime now) {
-        PointUsageCancellation cancellation = newCancellation(cancelTransaction, usage, source, amount, now);
-        cancellation.expireAt = source.getExpireAt();
-        return cancellation;
+        return newCancellation(cancelTransaction, usage, source, amount, now);
     }
 
     public static PointUsageCancellation reissued(PointTransaction cancelTransaction,
@@ -66,8 +55,6 @@ public class PointUsageCancellation {
                                                   LocalDateTime now) {
         PointUsageCancellation cancellation = newCancellation(cancelTransaction, usage, source, amount, now);
         cancellation.reissuedEarnedPointId = reissued.getId();
-        cancellation.reissuedPointKey = reissued.getPointKey();
-        cancellation.expireAt = reissued.getExpireAt();
         return cancellation;
     }
 
@@ -85,7 +72,6 @@ public class PointUsageCancellation {
         cancellation.pointUsageId = usage.getId();
         cancellation.amount = amount;
         cancellation.sourceEarnedPointId = source.getId();
-        cancellation.sourcePointKey = source.getPointKey();
         cancellation.createdAt = now;
         return cancellation;
     }

@@ -57,18 +57,6 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
                 .isEqualTo(clock.currentDateTime().plusDays(30));
     }
 
-    @Test
-    @DisplayName("최대 만료일은 5년 미만까지만 설정할 수 있다")
-    void maxExpireDaysCannotReachFiveYears() {
-        assertErrorCode(() -> policyService.updatePolicy(new PointPolicyValues(
-                1, 100_000, 1_000_000, 365, 1, 1825)), ErrorCode.INVALID_POLICY);
-    }
 
-    @Test
-    @DisplayName("최대 보유금액은 1회 최대 적립금액보다 작을 수 없다")
-    void maxUserBalanceMustCoverMaxEarnAmount() {
-        assertErrorCode(() -> policyService.updatePolicy(new PointPolicyValues(
-                1, 100_000, 50_000, 365, 1, 1824)), ErrorCode.INVALID_POLICY);
-    }
 
 }

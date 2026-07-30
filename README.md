@@ -86,7 +86,7 @@
 
 `earned_point.status` 는 `AVAILABLE` / `EXPIRED` / `CANCELED` 3가지입니다. 잔액이 0이 되는 것은 상태 전이가 아니라 `remaining_amount` 값 변화로만 표현해, 상태 머신을 단순하게 유지했습니다.
 
-`point_usage` / `point_usage_cancellation` 은 **조회 전용 원장 행**입니다. 그래서 응답에 필요한 값(`earned_point_key`, `earned_point_manual`, `earned_point_expire_at` 등)을 거래 시점 그대로 담습니다. 전부 `earned_point` 의 불변 컬럼을 복사한 것이라 원본과 어긋날 수 없고, 대신 사용/취소 상세 조회가 조인 없이 한 번에 끝납니다. ERD에서 갈색으로 표시한 컬럼들입니다.
+**값 복사는 두지 않습니다.** `pointKey` 는 `point_transaction` 에만 있고, `point_usage` / `point_usage_cancellation` 은 id 로만 참조합니다. 사용/취소 상세 응답은 조인 대신 **id 목록을 모아 한 번에 읽어서** 조립합니다 — 적립분이 몇 개든 조회 쿼리 수는 고정입니다 ([6-8](#6-8-n1-은-짐작하지-않고-센다)).
 
 DDL과 인덱스는 [`src/main/resources/db/schema.sql`](src/main/resources/db/schema.sql) 에 있습니다.
 
@@ -249,23 +249,26 @@ PointUsage.of(useTransaction, source, amount, now)
 
 ### 6-8. N+1 은 짐작하지 않고 센다
 
-사용취소는 되돌릴 적립분마다 `findById` 를 한 번씩 호출하고 있었습니다. Hibernate 통계로 재보니 적립분당 4개 문장이 나갔습니다.
+정규화를 유지하면 상세 응답을 만들 때 `point_usage → earned_point → point_transaction` 을 타야 합니다. 이걸 건별로 타면 N+1 이 되고, 값을 복사해 두면 정규화가 깨집니다. 세 번째 방법을 씁니다 — **id 를 모아 한 번에 읽습니다.**
+
+```java
+Map<Long, EarnedPoint> sources = sourcesOf(usages);
+Map<Long, String> earnPointKeys = transactionReader.earnPointKeysByEarnedPointId(sources.values());
+```
+
+적립분 수와 무관하게 조회는 2번입니다. 실제로 재봤습니다.
 
 | | 적립분 2개 | 적립분 6개 | 적립분당 |
 |---|---|---|---|
-| 수정 전 | 15 | 31 | **4** |
-| 수정 후 | 15 | 27 | **3** |
+| 사용 | | | **2** (사용상세 insert + 적립분 update) |
+| 사용취소 | | | **3** (사용상세 update + 적립분 update + 취소상세 insert) |
+| 만료분 재적립 취소 | | | **4** (+ 거래 insert + 적립분 insert) |
 
-남은 3개는 없앨 수 없는 쓰기입니다 — 사용상세 `update`, 적립분 `update`, 취소상세 `insert`. 조회는 루프 앞에서 한 번만 합니다.
-
-```java
-Map<Long, EarnedPoint> sources = earnedPointReader.byIds(
-        usages.stream().map(PointUsage::getEarnedPointId).distinct().toList());
-```
+적립분당 늘어나는 건 전부 없앨 수 없는 쓰기입니다. 조회는 늘지 않습니다.
 
 `byIds` 가 조회 결과 수와 요청한 id 수를 비교해 누락을 걸러내므로, 루프 안에서 `null` 을 확인할 필요가 없습니다.
 
-재적립 경로도 재봤습니다. `reissue` 안에서 `policyReader.current()` 를 매번 호출하는데, 적립분당 문장이 4개로 고정입니다 — 영속성 컨텍스트 1차 캐시가 두 번째 호출부터 DB 를 타지 않기 때문입니다. 눈으로는 N+1 처럼 보이지만 실제로는 아니어서 그대로 뒀습니다.
+재적립 경로의 `policyReader.current()` 는 루프 안에 있지만 N+1 이 아닙니다. 영속성 컨텍스트 1차 캐시가 두 번째 호출부터 DB 를 타지 않아 적립분당 문장이 4개로 고정입니다. 눈으로는 N+1 처럼 보이지만 실제로는 아니어서 그대로 뒀습니다.
 
 이 수치는 `PointQueryCountTest` 가 지키고 있어서, 나중에 루프 안에 조회가 다시 끼어들면 테스트가 깨집니다.
 
@@ -400,18 +403,33 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 ./gradlew test
 ```
 
-총 **64개 테스트, 전부 통과**합니다.
+총 **89개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
+
+### 단위 테스트 (스프링 없음, 40개)
+
+도메인 규칙은 DB도 트랜잭션도 필요 없습니다. 엔티티만 만들어 검증합니다.
+
+| 테스트 | 내용 | 소요 |
+|---|---|---|
+| `PointPolicyTest` | 적립 금액·만료일 경계값, 보유한도, 정책값 유효성 | 0.05s |
+| `EarnedPointTest` | 차감/복원/취소/만료 전이, 사용·복원 가능 판정 | 0.01s |
+| `PointUsageTest` | 취소 가능 금액, 부분취소 누적 | 0.00s |
+| `PointTransactionTest` | 거래 종류별 생성 규칙, pointKey 발급 | 0.00s |
+
+### 통합 테스트 (스프링 컨텍스트 1개 공유, 49개)
 
 | 테스트 | 내용 |
 |---|---|
 | `PointScenarioTest` | **과제 명세 4장 예시(A~E)를 그대로 재현** |
-| `PointEarnServiceTest` | 적립 금액·만료일 경계값, 최대 보유 한도, 수기지급 구분, 적립취소 4가지 거절 조건 |
-| `PointUseServiceTest` | 수기지급 우선 / 만료임박 순 사용, 부분 취소 반복, 만료분 재적립, `manual` 승계 |
-| `PointPolicyServiceTest` | 정책 런타임 변경이 즉시 반영되는지, 정책값 자체의 유효성 |
-| `PointConcurrencyTest` | 동시 사용/적립 시 초과 사용·한도 초과가 없는지, 최초 요청 동시 진입 |
+| `PointEarnServiceTest` | 정책이 적립에 반영되는지, 수기지급 구분, 적립취소 흐름 |
+| `PointUseServiceTest` | 수기지급 우선 / 만료임박 순 사용, 부분 취소 반복, 만료분 재적립 |
+| `PointPolicyServiceTest` | 정책 런타임 변경이 즉시 반영되는지 |
+| `PointConcurrencyTest` | 동시 사용/적립 시 초과 사용·한도 초과가 없는지 |
 | `PointIdempotencyTest` | 같은 `requestKey` 재전송·동시 전송 시 한 번만 반영되는지 |
-| `PointQueryCountTest` | 적립분 수가 늘어도 조회 쿼리가 늘지 않는지 (Hibernate 통계로 실측) |
+| `PointQueryCountTest` | 적립분이 늘어도 조회 쿼리가 늘지 않는지 (Hibernate 통계로 실측) |
 | `PointApiTest` | HTTP 계층 (성공 흐름, 검증 실패, 에러 코드) |
+
+**컨텍스트는 1개만 뜹니다.** 통합 테스트 전부가 `IntegrationTestSupport` 를 상속하고 설정이 같아서 스프링 테스트가 컨텍스트를 캐싱합니다. 예전에는 `PointApiTest` 만 `@AutoConfigureMockMvc` 를 따로 붙여 컨텍스트가 2개 떴는데, 공용 베이스로 올려 하나로 합쳤습니다.
 
 시간 의존 로직(만료)은 `Clock` 빈을 주입받고, 테스트에서는 `MutableClock` 으로 대체해 시계를 직접 이동시킵니다. `Thread.sleep` 없이 만료 시나리오를 결정적으로 검증할 수 있습니다.
 
@@ -419,6 +437,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 
 ```
 잔액 500 상태에서 100포인트 사용을 10건 동시 요청 → 정확히 5건 성공, 5건 INSUFFICIENT_BALANCE, 최종 잔액 0
+같은 requestKey 로 100포인트 사용을 10건 동시 요청 → 차감 1회, 최종 잔액 400
 ```
 
 ---

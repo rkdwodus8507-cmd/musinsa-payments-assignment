@@ -52,7 +52,6 @@ create table earned_point
 (
     id               bigint auto_increment not null,
     transaction_id   bigint               not null,
-    point_key        varchar(36)          not null,
     user_id          bigint               not null,
     original_amount  bigint               not null,
     remaining_amount bigint               not null,
@@ -71,11 +70,7 @@ create table point_usage
 (
     id                      bigint auto_increment not null,
     use_transaction_id      bigint               not null,
-    use_point_key           varchar(36)          not null,
     earned_point_id         bigint               not null,
-    earned_point_key        varchar(36)          not null,
-    earned_point_manual     boolean              not null,
-    earned_point_expire_at  timestamp            not null,
     order_id                varchar(64)          not null,
     amount                  bigint               not null,
     canceled_amount         bigint               not null,
@@ -94,10 +89,7 @@ create table point_usage_cancellation
     point_usage_id           bigint               not null,
     amount                   bigint               not null,
     source_earned_point_id   bigint               not null,
-    source_point_key         varchar(36)          not null,
     reissued_earned_point_id bigint,
-    reissued_point_key       varchar(36),
-    expire_at                timestamp            not null,
     created_at               timestamp            not null,
     primary key (id)
 );
