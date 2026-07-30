@@ -218,7 +218,29 @@ PointUsage.of(useTransaction, source, amount, now)
 
 `of(userId, EARN, amount, null, null, requestKey, memo, now)` 처럼 null 이 늘어서면 몇 번째가 무엇인지 알 수 없습니다. 엔티티를 넘기면 필요한 값은 그 안에서 꺼내므로 인자가 줄고 뜻이 분명해집니다.
 
-### 6-8. 멱등성은 락 안에서 판정한다
+### 6-8. N+1 은 짐작하지 않고 센다
+
+사용취소는 되돌릴 적립분마다 `findById` 를 한 번씩 호출하고 있었습니다. Hibernate 통계로 재보니 적립분당 4개 문장이 나갔습니다.
+
+| | 적립분 2개 | 적립분 6개 | 적립분당 |
+|---|---|---|---|
+| 수정 전 | 15 | 31 | **4** |
+| 수정 후 | 15 | 27 | **3** |
+
+남은 3개는 없앨 수 없는 쓰기입니다 — 사용상세 `update`, 적립분 `update`, 취소상세 `insert`. 조회는 루프 앞에서 한 번만 합니다.
+
+```java
+Map<Long, EarnedPoint> sources = earnedPointReader.byIds(
+        usages.stream().map(PointUsage::getEarnedPointId).distinct().toList());
+```
+
+`byIds` 가 조회 결과 수와 요청한 id 수를 비교해 누락을 걸러내므로, 루프 안에서 `null` 을 확인할 필요가 없습니다.
+
+재적립 경로도 재봤습니다. `reissue` 안에서 `policyReader.current()` 를 매번 호출하는데, 적립분당 문장이 4개로 고정입니다 — 영속성 컨텍스트 1차 캐시가 두 번째 호출부터 DB 를 타지 않기 때문입니다. 눈으로는 N+1 처럼 보이지만 실제로는 아니어서 그대로 뒀습니다.
+
+이 수치는 `PointQueryCountTest` 가 지키고 있어서, 나중에 루프 안에 조회가 다시 끼어들면 테스트가 깨집니다.
+
+### 6-9. 멱등성은 락 안에서 판정한다
 
 네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다. 그래서 재시도한 클라이언트도 같은 `pointKey` 를 받습니다.
 
@@ -247,7 +269,7 @@ public UseResult use(UseCommand command) {
 
 전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
 
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-8](#6-8-멱등성은-락-안에서-판정한다) 참고.
+네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-9](#6-9-멱등성은-락-안에서-판정한다) 참고.
 
 ### 포인트
 
@@ -349,7 +371,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 ./gradlew test
 ```
 
-총 **61개 테스트, 전부 통과**합니다.
+총 **64개 테스트, 전부 통과**합니다.
 
 | 테스트 | 내용 |
 |---|---|
@@ -359,6 +381,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 | `PointPolicyServiceTest` | 정책 런타임 변경이 즉시 반영되는지, 정책값 자체의 유효성 |
 | `PointConcurrencyTest` | 동시 사용/적립 시 초과 사용·한도 초과가 없는지, 최초 요청 동시 진입 |
 | `PointIdempotencyTest` | 같은 `requestKey` 재전송·동시 전송 시 한 번만 반영되는지 |
+| `PointQueryCountTest` | 적립분 수가 늘어도 조회 쿼리가 늘지 않는지 (Hibernate 통계로 실측) |
 | `PointApiTest` | HTTP 계층 (성공 흐름, 검증 실패, 에러 코드) |
 
 시간 의존 로직(만료)은 `Clock` 빈을 주입받고, 테스트에서는 `MutableClock` 으로 대체해 시계를 직접 이동시킵니다. `Thread.sleep` 없이 만료 시나리오를 결정적으로 검증할 수 있습니다.

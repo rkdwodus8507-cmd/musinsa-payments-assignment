@@ -20,6 +20,7 @@ import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -108,6 +109,9 @@ public class PointUseService {
     }
 
     private void restoreInUsedOrder(List<PointUsage> usages, PointTransaction cancelTransaction, LocalDateTime now) {
+        Map<Long, EarnedPoint> sources = earnedPointReader.byIds(
+                usages.stream().map(PointUsage::getEarnedPointId).distinct().toList());
+
         long remaining = cancelTransaction.getAmount();
         for (PointUsage usage : usages) {
             if (remaining == 0) {
@@ -118,14 +122,16 @@ public class PointUseService {
                 continue;
             }
             usage.cancel(restored);
-            giveBack(usage, restored, cancelTransaction, now);
+            giveBack(usage, sources.get(usage.getEarnedPointId()), restored, cancelTransaction, now);
             remaining -= restored;
         }
     }
 
-    private void giveBack(PointUsage usage, long amount, PointTransaction cancelTransaction, LocalDateTime now) {
-        EarnedPoint source = earnedPointReader.byId(usage.getEarnedPointId());
-
+    private void giveBack(PointUsage usage,
+                          EarnedPoint source,
+                          long amount,
+                          PointTransaction cancelTransaction,
+                          LocalDateTime now) {
         if (source.canBeRestoredAt(now)) {
             source.restore(amount);
             cancellationRepository.save(

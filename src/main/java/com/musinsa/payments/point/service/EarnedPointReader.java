@@ -7,7 +7,11 @@ import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -30,9 +34,14 @@ public class EarnedPointReader {
         return earnedPointRepository.findByUserIdOrderByIdAsc(userId);
     }
 
-    public EarnedPoint byId(Long earnedPointId) {
-        return earnedPointRepository.findById(earnedPointId)
-                .orElseThrow(() -> PointException.of(ErrorCode.EARNED_POINT_NOT_FOUND, "id=" + earnedPointId));
+
+    public Map<Long, EarnedPoint> byIds(Collection<Long> earnedPointIds) {
+        Map<Long, EarnedPoint> found = earnedPointRepository.findAllById(earnedPointIds).stream()
+                .collect(Collectors.toMap(EarnedPoint::getId, Function.identity()));
+        if (found.size() != earnedPointIds.size()) {
+            throw PointException.of(ErrorCode.EARNED_POINT_NOT_FOUND, "ids=" + earnedPointIds);
+        }
+        return found;
     }
 
     public EarnedPoint byTransaction(Long transactionId) {

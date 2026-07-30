@@ -78,7 +78,7 @@ public abstract class IntegrationTestSupport {
     protected PointPolicyRepository policyRepository;
 
     @BeforeEach
-    void resetState() {
+    protected void resetState() {
         cancellationRepository.deleteAllInBatch();
         usageRepository.deleteAllInBatch();
         earnedPointRepository.deleteAllInBatch();
