@@ -1,4 +1,11 @@
 package com.musinsa.payments.point.service.dto;
 
-public record CancelEarnCommand(String earnPointKey, String requestKey) {
+import lombok.Value;
+
+@Value
+public class CancelEarnCommand {
+
+    private final String earnPointKey;
+
+    private final String requestKey;
 }

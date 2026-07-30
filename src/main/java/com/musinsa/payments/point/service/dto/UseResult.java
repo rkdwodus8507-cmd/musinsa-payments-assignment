@@ -1,11 +1,20 @@
 package com.musinsa.payments.point.service.dto;
 
 import java.util.List;
+import lombok.Value;
 
-public record UseResult(String pointKey,
-                        Long userId,
-                        String orderId,
-                        long amount,
-                        long balance,
-                        List<UsedPointDetail> details) {
+@Value
+public class UseResult {
+
+    private final String pointKey;
+
+    private final Long userId;
+
+    private final String orderId;
+
+    private final long amount;
+
+    private final long balance;
+
+    private final List<UsedPointDetail> details;
 }

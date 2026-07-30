@@ -1,4 +1,13 @@
 package com.musinsa.payments.point.service.dto;
 
-public record CancelUseCommand(String usePointKey, long amount, String requestKey) {
+import lombok.Value;
+
+@Value
+public class CancelUseCommand {
+
+    private final String usePointKey;
+
+    private final long amount;
+
+    private final String requestKey;
 }

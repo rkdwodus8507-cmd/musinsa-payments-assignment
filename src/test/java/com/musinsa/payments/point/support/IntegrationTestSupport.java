@@ -110,7 +110,7 @@ public abstract class IntegrationTestSupport {
     }
 
     protected long balanceOf(long userId) {
-        return queryService.getBalance(userId).balance();
+        return queryService.getBalance(userId).getBalance();
     }
 
     protected void assertErrorCode(Runnable action, ErrorCode expected) {
@@ -151,7 +151,23 @@ public abstract class IntegrationTestSupport {
         return new ConcurrentRun<>(successes, failures);
     }
 
-    protected record ConcurrentRun<T>(List<T> successes, List<String> failures) {
+    protected static class ConcurrentRun<T> {
+
+        private final List<T> successes;
+        private final List<String> failures;
+
+        ConcurrentRun(List<T> successes, List<String> failures) {
+            this.successes = successes;
+            this.failures = failures;
+        }
+
+        public List<T> successes() {
+            return successes;
+        }
+
+        public List<String> failures() {
+            return failures;
+        }
 
         public int successCount() {
             return successes.size();

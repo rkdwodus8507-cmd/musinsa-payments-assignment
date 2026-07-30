@@ -1,12 +1,22 @@
 package com.musinsa.payments.point.service.dto;
 
 import java.time.LocalDateTime;
+import lombok.Value;
 
-public record PolicyResult(long minEarnAmount,
-                           long maxEarnAmount,
-                           long maxUserBalance,
-                           int defaultExpireDays,
-                           int minExpireDays,
-                           int maxExpireDays,
-                           LocalDateTime updatedAt) {
+@Value
+public class PolicyResult {
+
+    private final long minEarnAmount;
+
+    private final long maxEarnAmount;
+
+    private final long maxUserBalance;
+
+    private final int defaultExpireDays;
+
+    private final int minExpireDays;
+
+    private final int maxExpireDays;
+
+    private final LocalDateTime updatedAt;
 }

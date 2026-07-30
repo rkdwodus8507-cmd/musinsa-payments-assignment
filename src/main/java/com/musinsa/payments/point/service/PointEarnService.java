@@ -33,34 +33,34 @@ public class PointEarnService {
 
     @Transactional
     public EarnResult earn(EarnCommand command) {
-        userPointLocker.lock(command.userId());
+        userPointLocker.lock(command.getUserId());
 
-        return idempotencyGuard.runOnce(command.userId(), command.requestKey(), PointTransactionType.EARN,
+        return idempotencyGuard.runOnce(command.getUserId(), command.getRequestKey(), PointTransactionType.EARN,
                 this::toEarnResult,
                 () -> grantPoints(command));
     }
 
     @Transactional
     public EarnCancelResult cancelEarn(CancelEarnCommand command) {
-        PointTransaction earnTransaction = transactionReader.earnByPointKey(command.earnPointKey());
+        PointTransaction earnTransaction = transactionReader.earnByPointKey(command.getEarnPointKey());
         userPointLocker.lock(earnTransaction.getUserId());
 
-        return idempotencyGuard.runOnce(earnTransaction.getUserId(), command.requestKey(), PointTransactionType.EARN_CANCEL,
+        return idempotencyGuard.runOnce(earnTransaction.getUserId(), command.getRequestKey(), PointTransactionType.EARN_CANCEL,
                 this::toEarnCancelResult,
-                () -> takeBackPoints(earnTransaction, command.requestKey()));
+                () -> takeBackPoints(earnTransaction, command.getRequestKey()));
     }
 
     private EarnResult grantPoints(EarnCommand command) {
         LocalDateTime now = LocalDateTime.now(clock);
         PointPolicy policy = policyReader.current();
 
-        policy.validateEarnAmount(command.amount());
-        policy.validateBalanceAfterEarn(earnedPointReader.balanceOf(command.userId()), command.amount());
-        LocalDateTime expireAt = now.plusDays(policy.resolveExpireDays(command.expireDays()));
+        policy.validateEarnAmount(command.getAmount());
+        policy.validateBalanceAfterEarn(earnedPointReader.balanceOf(command.getUserId()), command.getAmount());
+        LocalDateTime expireAt = now.plusDays(policy.resolveExpireDays(command.getExpireDays()));
 
         PointTransaction earnTransaction = transactionRepository.save(PointTransaction.earn(
-                command.userId(), command.amount(), command.memo(), command.requestKey(), now));
-        earnedPointRepository.save(EarnedPoint.from(earnTransaction, command.manual(), expireAt, now));
+                command.getUserId(), command.getAmount(), command.getMemo(), command.getRequestKey(), now));
+        earnedPointRepository.save(EarnedPoint.from(earnTransaction, command.isManual(), expireAt, now));
 
         return toEarnResult(earnTransaction);
     }

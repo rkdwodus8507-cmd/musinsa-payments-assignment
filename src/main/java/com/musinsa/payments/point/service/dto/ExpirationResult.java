@@ -1,4 +1,11 @@
 package com.musinsa.payments.point.service.dto;
 
-public record ExpirationResult(int expiredCount, long expiredAmount) {
+import lombok.Value;
+
+@Value
+public class ExpirationResult {
+
+    private final int expiredCount;
+
+    private final long expiredAmount;
 }

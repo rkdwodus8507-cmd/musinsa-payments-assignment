@@ -98,7 +98,7 @@ DDL과 인덱스는 [`src/main/resources/db/schema.sql`](src/main/resources/db/s
 
 지키는 규칙은 세 가지입니다.
 
-**엔티티는 서비스 계층을 벗어나지 않습니다.** 컨트롤러 반환 타입은 전부 record DTO 이고, `service/dto` 의 어떤 record 도 엔티티를 import 하지 않습니다. 예전에는 `PolicyResult.of(PointPolicy)` 처럼 응답 DTO 가 엔티티를 알고 있었는데, 매핑을 `PointPolicyService` 안으로 옮기고 DTO 는 순수 record 로 되돌렸습니다.
+**엔티티는 서비스 계층을 벗어나지 않습니다.** 컨트롤러 반환 타입은 전부 DTO 클래스이고, `service/dto` 의 어떤 클래스도 엔티티를 import 하지 않습니다. 예전에는 `PolicyResult.of(PointPolicy)` 처럼 응답 DTO 가 엔티티를 알고 있었는데, 매핑을 `PointPolicyService` 안으로 옮기고 DTO 는 값만 담게 되돌렸습니다.
 
 **서비스가 다른 서비스를 호출하지 않습니다.** `PointEarnService` / `PointUseService` 가 정책을 읽으려고 `PointPolicyService` 를 호출하고 있었는데, `PointPolicyReader` 를 두고 그쪽을 보게 했습니다. `EarnedPointReader`, `PointTransactionReader` 와 같은 결입니다 — 리포지토리를 감싸 도메인 예외를 던지는 서비스 계층 조회 담당입니다.
 
@@ -173,7 +173,21 @@ curl -X PUT http://localhost:8080/api/v1/admin/points/policies \
 
 수동 실행: `POST /api/v1/admin/points/expirations`
 
-### 6-6. 읽는 순서가 곧 처리 순서
+### 6-6. DTO 는 record 대신 Lombok 클래스로
+
+`record` 는 쓰지 않았습니다. 실행 환경의 JDK 가 무엇일지 확정할 수 없을 때 언어 기능에 의존하는 쪽보다 평범한 클래스가 안전하다고 봤습니다. 이미 엔티티 전체가 Lombok 을 쓰고 있으므로 DTO 도 같은 방식으로 맞췄습니다.
+
+| 대상 | 애노테이션 | 이유 |
+|---|---|---|
+| `service/dto` 결과·커맨드, `PointPolicyValues`, `ErrorResponse` | `@Value` | 불변 + getter + `equals`/`hashCode`. record 와 사실상 같은 계약 |
+| `api/dto` 요청 | `@Getter @Setter @NoArgsConstructor @AllArgsConstructor` | Jackson 이 파라미터 이름 정보 없이도 역직렬화할 수 있는 JavaBean 방식 |
+| `config` 프로퍼티 | 동일 | `@ConfigurationProperties` JavaBean 바인딩 |
+
+`@Value` 를 쓴 이유가 하나 더 있습니다. 멱등성 테스트가 `retried.getDetails()` 와 `first.getDetails()` 를 값으로 비교하는데, `equals` 가 없으면 참조 비교가 되어 통과하지 못합니다.
+
+접근자는 `pointKey()` 에서 `getPointKey()` 로 바뀌었지만 **JSON 응답 필드명은 그대로**입니다. record 의 `pointKey()` 와 Lombok 의 `getPointKey()` 가 Jackson 에서 같은 이름으로 직렬화되기 때문입니다. 실제 기동해 적립·사용·사용취소·잔액·정책변경 응답이 이전과 동일한지 확인했습니다.
+
+### 6-7. 읽는 순서가 곧 처리 순서
 
 공개 메서드 네 개는 모두 같은 모양입니다. 위에서 아래로 읽으면 무슨 일이 일어나는지 다 드러나고, 궁금한 단계만 펼쳐 보면 됩니다.
 
@@ -204,7 +218,7 @@ PointUsage.of(useTransaction, source, amount, now)
 
 `of(userId, EARN, amount, null, null, requestKey, memo, now)` 처럼 null 이 늘어서면 몇 번째가 무엇인지 알 수 없습니다. 엔티티를 넘기면 필요한 값은 그 안에서 꺼내므로 인자가 줄고 뜻이 분명해집니다.
 
-### 6-7. 멱등성은 락 안에서 판정한다
+### 6-8. 멱등성은 락 안에서 판정한다
 
 네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다. 그래서 재시도한 클라이언트도 같은 `pointKey` 를 받습니다.
 
@@ -233,7 +247,7 @@ public UseResult use(UseCommand command) {
 
 전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
 
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-7](#6-7-멱등성은-락-안에서-판정한다) 참고.
+네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-8](#6-8-멱등성은-락-안에서-판정한다) 참고.
 
 ### 포인트
 
@@ -404,13 +418,13 @@ src/main/java/com/musinsa/payments/point/
 │   ├── EarnedPointReader       적립분·잔액 조회
 │   ├── PointTransactionReader  거래 조회와 종류 검증
 │   ├── PointPolicyReader       현재 정책 조회
-│   └── dto/                    커맨드 / 결과 record
+│   └── dto/                    커맨드 / 결과 DTO
 └── support/error/        에러 코드, 예외, 전역 핸들러
 ```
 
 금액 계산 규칙과 상태 전이 조건은 서비스가 아니라 **엔티티 안**에 있습니다. 잘못된 차감·복원은 서비스 어디서 호출하든 엔티티에서 막힙니다.
 
-공개 비즈니스 메서드는 모두 같은 세 줄로 읽힙니다 — **락 → 멱등성 판정 → 실제 처리**. 자세한 내용은 [6-6](#6-6-읽는-순서가-곧-처리-순서) 에 정리했습니다.
+공개 비즈니스 메서드는 모두 같은 세 줄로 읽힙니다 — **락 → 멱등성 판정 → 실제 처리**. 자세한 내용은 [6-7](#6-7-읽는-순서가-곧-처리-순서) 에 정리했습니다.
 
 주석은 두지 않았습니다. 이름으로 설명되지 않는 코드가 있으면 이름을 고쳤습니다.
 

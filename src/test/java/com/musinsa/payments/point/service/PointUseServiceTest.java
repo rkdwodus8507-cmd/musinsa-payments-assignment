@@ -29,8 +29,8 @@ class PointUseServiceTest extends IntegrationTestSupport {
         UseResult use = use(ORDER_ID, 700);
 
         assertUsedInOrder(use,
-                tuple(manualLater.pointKey(), 500L),
-                tuple(normalSoon.pointKey(), 200L));
+                tuple(manualLater.getPointKey(), 500L),
+                tuple(normalSoon.getPointKey(), 200L));
     }
 
     @Test
@@ -42,8 +42,8 @@ class PointUseServiceTest extends IntegrationTestSupport {
         UseResult use = use(ORDER_ID, 400);
 
         assertUsedInOrder(use,
-                tuple(sooner.pointKey(), 300L),
-                tuple(later.pointKey(), 100L));
+                tuple(sooner.getPointKey(), 300L),
+                tuple(later.getPointKey(), 100L));
     }
 
     @Test
@@ -56,9 +56,9 @@ class PointUseServiceTest extends IntegrationTestSupport {
         UseResult use = use(ORDER_ID, 750);
 
         assertUsedInOrder(use,
-                tuple(sooner.pointKey(), 300L),
-                tuple(middle.pointKey(), 300L),
-                tuple(later.pointKey(), 150L));
+                tuple(sooner.getPointKey(), 300L),
+                tuple(middle.getPointKey(), 300L),
+                tuple(later.getPointKey(), 150L));
     }
 
     @Test
@@ -71,7 +71,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         assertThat(balanceOf(USER_ID)).isEqualTo(500);
         assertErrorCode(() -> use(ORDER_ID, 600), ErrorCode.INSUFFICIENT_BALANCE);
 
-        assertThat(use(ORDER_ID, 500).details()).hasSize(1);
+        assertThat(use(ORDER_ID, 500).getDetails()).hasSize(1);
     }
 
     @Test
@@ -90,15 +90,15 @@ class PointUseServiceTest extends IntegrationTestSupport {
         EarnResult b = earn(500, 365);
         UseResult use = use(ORDER_ID, 1200);
 
-        UseCancelResult cancel = cancelUse(use.pointKey(), 1200);
+        UseCancelResult cancel = cancelUse(use.getPointKey(), 1200);
 
-        assertThat(cancel.balance()).isEqualTo(1500);
-        assertThat(cancel.remainingCancelableAmount()).isZero();
-        assertThat(cancel.details())
-                .extracting(CanceledPointDetail::earnPointKey, CanceledPointDetail::amount, CanceledPointDetail::reissued)
+        assertThat(cancel.getBalance()).isEqualTo(1500);
+        assertThat(cancel.getRemainingCancelableAmount()).isZero();
+        assertThat(cancel.getDetails())
+                .extracting(CanceledPointDetail::getEarnPointKey, CanceledPointDetail::getAmount, CanceledPointDetail::isReissued)
                 .containsExactly(
-                        tuple(a.pointKey(), 1000L, false),
-                        tuple(b.pointKey(), 200L, false));
+                        tuple(a.getPointKey(), 1000L, false),
+                        tuple(b.getPointKey(), 200L, false));
     }
 
     @Test
@@ -107,12 +107,12 @@ class PointUseServiceTest extends IntegrationTestSupport {
         earn(1000, null);
         UseResult use = use(ORDER_ID, 900);
 
-        assertThat(cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isEqualTo(600);
-        assertThat(cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isEqualTo(300);
-        assertThat(cancelUse(use.pointKey(), 300).remainingCancelableAmount()).isZero();
+        assertThat(cancelUse(use.getPointKey(), 300).getRemainingCancelableAmount()).isEqualTo(600);
+        assertThat(cancelUse(use.getPointKey(), 300).getRemainingCancelableAmount()).isEqualTo(300);
+        assertThat(cancelUse(use.getPointKey(), 300).getRemainingCancelableAmount()).isZero();
         assertThat(balanceOf(USER_ID)).isEqualTo(1000);
 
-        assertErrorCode(() -> cancelUse(use.pointKey(), 1), ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED);
+        assertErrorCode(() -> cancelUse(use.getPointKey(), 1), ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED);
     }
 
     @Test
@@ -123,11 +123,11 @@ class PointUseServiceTest extends IntegrationTestSupport {
         clock.plusDays(6);
         expirationService.expireAll();
 
-        cancelUse(use.pointKey(), 1000);
+        cancelUse(use.getPointKey(), 1000);
 
         BalanceResult balance = queryService.getBalance(USER_ID);
-        assertThat(balance.balance()).isEqualTo(1000);
-        assertThat(balance.manualBalance()).isEqualTo(1000);
+        assertThat(balance.getBalance()).isEqualTo(1000);
+        assertThat(balance.getManualBalance()).isEqualTo(1000);
     }
 
     @Test
@@ -137,10 +137,10 @@ class PointUseServiceTest extends IntegrationTestSupport {
         UseResult use = use(ORDER_ID, 1000);
         clock.plusDays(6);
 
-        UseCancelResult cancel = cancelUse(use.pointKey(), 1000);
+        UseCancelResult cancel = cancelUse(use.getPointKey(), 1000);
 
-        assertThat(cancel.details()).singleElement()
-                .extracting(CanceledPointDetail::reissued)
+        assertThat(cancel.getDetails()).singleElement()
+                .extracting(CanceledPointDetail::isReissued)
                 .isEqualTo(true);
         assertThat(balanceOf(USER_ID)).isEqualTo(1000);
     }
@@ -156,7 +156,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         assertThat(balanceOf(USER_ID)).isEqualTo(1_000_000);
 
         clock.plusDays(6);
-        cancelUse(use.pointKey(), 100_000);
+        cancelUse(use.getPointKey(), 100_000);
 
         assertThat(balanceOf(USER_ID)).isEqualTo(1_100_000);
     }
@@ -166,12 +166,12 @@ class PointUseServiceTest extends IntegrationTestSupport {
     void cannotCancelUseWithEarnTransaction() {
         EarnResult earn = earn(1000, null);
 
-        assertErrorCode(() -> cancelUse(earn.pointKey(), 100), ErrorCode.NOT_USE_TRANSACTION);
+        assertErrorCode(() -> cancelUse(earn.getPointKey(), 100), ErrorCode.NOT_USE_TRANSACTION);
     }
 
     private void assertUsedInOrder(UseResult use, Tuple... expectedInOrder) {
-        assertThat(use.details())
-                .extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
+        assertThat(use.getDetails())
+                .extracting(UsedPointDetail::getEarnPointKey, UsedPointDetail::getAmount)
                 .containsExactly(expectedInOrder);
     }
 }

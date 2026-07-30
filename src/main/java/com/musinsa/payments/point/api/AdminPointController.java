@@ -34,7 +34,7 @@ public class AdminPointController {
     @PostMapping("/earn")
     public EarnResult manualEarn(@Valid @RequestBody EarnRequest request) {
         return earnService.earn(EarnCommand.ofAdmin(
-                request.userId(), request.amount(), request.expireDays(), request.memo(), request.requestKey()));
+                request.getUserId(), request.getAmount(), request.getExpireDays(), request.getMemo(), request.getRequestKey()));
     }
 
     @Operation(summary = "포인트 정책 조회")

@@ -28,8 +28,8 @@ class PointIdempotencyTest extends IntegrationTestSupport {
         EarnResult first = earnWithKey(1000, REQUEST_KEY);
         EarnResult retried = earnWithKey(1000, REQUEST_KEY);
 
-        assertThat(retried.pointKey()).isEqualTo(first.pointKey());
-        assertThat(retried.amount()).isEqualTo(1000);
+        assertThat(retried.getPointKey()).isEqualTo(first.getPointKey());
+        assertThat(retried.getAmount()).isEqualTo(1000);
         assertThat(balanceOf(USER_ID)).isEqualTo(1000);
         assertThat(earnedPointRepository.findByUserIdOrderByIdAsc(USER_ID)).hasSize(1);
     }
@@ -52,8 +52,8 @@ class PointIdempotencyTest extends IntegrationTestSupport {
         UseResult first = useWithKey(300, REQUEST_KEY);
         UseResult retried = useWithKey(300, REQUEST_KEY);
 
-        assertThat(retried.pointKey()).isEqualTo(first.pointKey());
-        assertThat(retried.details()).isEqualTo(first.details());
+        assertThat(retried.getPointKey()).isEqualTo(first.getPointKey());
+        assertThat(retried.getDetails()).isEqualTo(first.getDetails());
         assertThat(balanceOf(USER_ID)).isEqualTo(700);
         assertThat(usageRepository.findByOrderIdOrderByIdAsc(ORDER_ID)).hasSize(1);
     }
@@ -64,11 +64,11 @@ class PointIdempotencyTest extends IntegrationTestSupport {
         earn(1000, null);
         UseResult use = use(ORDER_ID, 900);
 
-        UseCancelResult first = useService.cancelUse(new CancelUseCommand(use.pointKey(), 400, REQUEST_KEY));
-        UseCancelResult retried = useService.cancelUse(new CancelUseCommand(use.pointKey(), 400, REQUEST_KEY));
+        UseCancelResult first = useService.cancelUse(new CancelUseCommand(use.getPointKey(), 400, REQUEST_KEY));
+        UseCancelResult retried = useService.cancelUse(new CancelUseCommand(use.getPointKey(), 400, REQUEST_KEY));
 
-        assertThat(retried.pointKey()).isEqualTo(first.pointKey());
-        assertThat(retried.remainingCancelableAmount()).isEqualTo(500);
+        assertThat(retried.getPointKey()).isEqualTo(first.getPointKey());
+        assertThat(retried.getRemainingCancelableAmount()).isEqualTo(500);
         assertThat(balanceOf(USER_ID)).isEqualTo(500);
     }
 
@@ -77,8 +77,8 @@ class PointIdempotencyTest extends IntegrationTestSupport {
     void duplicatedEarnCancelIsAppliedOnce() {
         EarnResult earn = earn(1000, null);
 
-        String firstKey = earnService.cancelEarn(new CancelEarnCommand(earn.pointKey(), REQUEST_KEY)).pointKey();
-        String retriedKey = earnService.cancelEarn(new CancelEarnCommand(earn.pointKey(), REQUEST_KEY)).pointKey();
+        String firstKey = earnService.cancelEarn(new CancelEarnCommand(earn.getPointKey(), REQUEST_KEY)).getPointKey();
+        String retriedKey = earnService.cancelEarn(new CancelEarnCommand(earn.getPointKey(), REQUEST_KEY)).getPointKey();
 
         assertThat(retriedKey).isEqualTo(firstKey);
         assertThat(balanceOf(USER_ID)).isZero();
@@ -113,7 +113,7 @@ class PointIdempotencyTest extends IntegrationTestSupport {
         ConcurrentRun<UseResult> run = runConcurrently(10, index -> useWithKey(100, REQUEST_KEY));
 
         assertThat(run.successCount()).as("실패 원인: %s", run.failures()).isEqualTo(10);
-        assertThat(run.successes()).extracting(UseResult::pointKey).containsOnly(run.successes().get(0).pointKey());
+        assertThat(run.successes()).extracting(UseResult::getPointKey).containsOnly(run.successes().get(0).getPointKey());
         assertThat(balanceOf(USER_ID)).isEqualTo(400);
         assertThat(usageRepository.findByOrderIdOrderByIdAsc(ORDER_ID)).hasSize(1);
     }

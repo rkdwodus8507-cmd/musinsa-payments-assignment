@@ -1,9 +1,16 @@
 package com.musinsa.payments.point.service.dto;
 
 import java.util.List;
+import lombok.Value;
 
-public record BalanceResult(Long userId,
-                            long balance,
-                            long manualBalance,
-                            List<EarnedPointSummary> lots) {
+@Value
+public class BalanceResult {
+
+    private final Long userId;
+
+    private final long balance;
+
+    private final long manualBalance;
+
+    private final List<EarnedPointSummary> earnedPoints;
 }

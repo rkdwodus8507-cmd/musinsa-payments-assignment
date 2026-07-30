@@ -1,9 +1,16 @@
 package com.musinsa.payments.point.service.dto;
 
 import java.time.LocalDateTime;
+import lombok.Value;
 
-public record UsedPointDetail(String earnPointKey,
-                              long amount,
-                              boolean manual,
-                              LocalDateTime expireAt) {
+@Value
+public class UsedPointDetail {
+
+    private final String earnPointKey;
+
+    private final long amount;
+
+    private final boolean manual;
+
+    private final LocalDateTime expireAt;
 }

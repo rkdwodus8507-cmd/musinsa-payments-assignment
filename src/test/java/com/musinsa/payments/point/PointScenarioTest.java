@@ -36,10 +36,10 @@ class PointScenarioTest extends IntegrationTestSupport {
 
         UseResult c = use(ORDER_ID, 1200);
         assertThat(balanceOf(USER_ID)).isEqualTo(300);
-        assertThat(c.details()).extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
+        assertThat(c.getDetails()).extracting(UsedPointDetail::getEarnPointKey, UsedPointDetail::getAmount)
                 .containsExactly(
-                        tuple(a.pointKey(), 1000L),
-                        tuple(b.pointKey(), 200L));
+                        tuple(a.getPointKey(), 1000L),
+                        tuple(b.getPointKey(), 200L));
         assertThat(earnedPointOf(a).getRemainingAmount()).isZero();
         assertThat(earnedPointOf(b).getRemainingAmount()).isEqualTo(300);
 
@@ -48,31 +48,31 @@ class PointScenarioTest extends IntegrationTestSupport {
         assertThat(earnedPointOf(a).getStatus()).isEqualTo(EarnedPointStatus.EXPIRED);
         assertThat(balanceOf(USER_ID)).isEqualTo(300);
 
-        UseCancelResult d = cancelUse(c.pointKey(), 1100);
+        UseCancelResult d = cancelUse(c.getPointKey(), 1100);
 
         assertThat(balanceOf(USER_ID)).isEqualTo(1400);
-        assertThat(d.remainingCancelableAmount()).isEqualTo(100);
+        assertThat(d.getRemainingCancelableAmount()).isEqualTo(100);
         assertThat(earnedPointOf(b).getRemainingAmount()).isEqualTo(400);
         assertThat(earnedPointOf(a).getRemainingAmount()).isZero();
 
-        CanceledPointDetail reissued = d.details().stream()
-                .filter(CanceledPointDetail::reissued)
+        CanceledPointDetail reissued = d.getDetails().stream()
+                .filter(CanceledPointDetail::isReissued)
                 .findFirst()
                 .orElseThrow();
-        assertThat(reissued.earnPointKey()).isEqualTo(a.pointKey());
-        assertThat(reissued.amount()).isEqualTo(1000);
+        assertThat(reissued.getEarnPointKey()).isEqualTo(a.getPointKey());
+        assertThat(reissued.getAmount()).isEqualTo(1000);
 
-        EarnedPoint reissuedEarnedPoint = earnedPointOf(reissued.reissuedPointKey());
+        EarnedPoint reissuedEarnedPoint = earnedPointOf(reissued.getReissuedPointKey());
         assertThat(reissuedEarnedPoint.getRemainingAmount()).isEqualTo(1000);
         assertThat(reissuedEarnedPoint.getStatus()).isEqualTo(EarnedPointStatus.AVAILABLE);
         assertThat(reissuedEarnedPoint.getExpireAt()).isEqualTo(clock.currentDateTime().plusDays(365));
 
-        CanceledPointDetail restored = d.details().stream()
-                .filter(detail -> !detail.reissued())
+        CanceledPointDetail restored = d.getDetails().stream()
+                .filter(detail -> !detail.isReissued())
                 .findFirst()
                 .orElseThrow();
-        assertThat(restored.earnPointKey()).isEqualTo(b.pointKey());
-        assertThat(restored.amount()).isEqualTo(100);
+        assertThat(restored.getEarnPointKey()).isEqualTo(b.getPointKey());
+        assertThat(restored.getAmount()).isEqualTo(100);
     }
 
     @Test
@@ -82,15 +82,15 @@ class PointScenarioTest extends IntegrationTestSupport {
         earn(500, 365);
         UseResult c = use(ORDER_ID, 1200);
 
-        cancelUse(c.pointKey(), 1100);
+        cancelUse(c.getPointKey(), 1100);
 
-        assertThatThrownBy(() -> cancelUse(c.pointKey(), 101))
+        assertThatThrownBy(() -> cancelUse(c.getPointKey(), 101))
                 .isInstanceOf(PointException.class)
                 .extracting(e -> ((PointException) e).getErrorCode())
                 .isEqualTo(ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED);
 
-        UseCancelResult last = cancelUse(c.pointKey(), 100);
-        assertThat(last.remainingCancelableAmount()).isZero();
+        UseCancelResult last = cancelUse(c.getPointKey(), 100);
+        assertThat(last.getRemainingCancelableAmount()).isZero();
     }
 
     @Test
@@ -102,21 +102,21 @@ class PointScenarioTest extends IntegrationTestSupport {
 
         OrderUsageResult usage = queryService.getOrderUsage(ORDER_ID);
 
-        assertThat(usage.orderId()).isEqualTo(ORDER_ID);
-        assertThat(usage.usedAmount()).isEqualTo(1200);
-        assertThat(usage.canceledAmount()).isZero();
-        assertThat(usage.details()).hasSize(2);
-        assertThat(usage.details())
-                .extracting(OrderUsageDetail::usePointKey,
-                        OrderUsageDetail::earnPointKey,
-                        OrderUsageDetail::amount)
+        assertThat(usage.getOrderId()).isEqualTo(ORDER_ID);
+        assertThat(usage.getUsedAmount()).isEqualTo(1200);
+        assertThat(usage.getCanceledAmount()).isZero();
+        assertThat(usage.getDetails()).hasSize(2);
+        assertThat(usage.getDetails())
+                .extracting(OrderUsageDetail::getUsePointKey,
+                        OrderUsageDetail::getEarnPointKey,
+                        OrderUsageDetail::getAmount)
                 .containsExactly(
-                        tuple(c.pointKey(), a.pointKey(), 1000L),
-                        tuple(c.pointKey(), b.pointKey(), 200L));
+                        tuple(c.getPointKey(), a.getPointKey(), 1000L),
+                        tuple(c.getPointKey(), b.getPointKey(), 200L));
     }
 
     private EarnedPoint earnedPointOf(EarnResult earn) {
-        return earnedPointOf(earn.pointKey());
+        return earnedPointOf(earn.getPointKey());
     }
 
     private EarnedPoint earnedPointOf(String pointKey) {

@@ -43,35 +43,35 @@ public class PointUseService {
 
     @Transactional
     public UseResult use(UseCommand command) {
-        userPointLocker.lock(command.userId());
+        userPointLocker.lock(command.getUserId());
 
-        return idempotencyGuard.runOnce(command.userId(), command.requestKey(), PointTransactionType.USE,
+        return idempotencyGuard.runOnce(command.getUserId(), command.getRequestKey(), PointTransactionType.USE,
                 this::toUseResult,
                 () -> deductPoints(command));
     }
 
     @Transactional
     public UseCancelResult cancelUse(CancelUseCommand command) {
-        PointTransaction useTransaction = transactionReader.useByPointKey(command.usePointKey());
+        PointTransaction useTransaction = transactionReader.useByPointKey(command.getUsePointKey());
         userPointLocker.lock(useTransaction.getUserId());
 
-        return idempotencyGuard.runOnce(useTransaction.getUserId(), command.requestKey(), PointTransactionType.USE_CANCEL,
+        return idempotencyGuard.runOnce(useTransaction.getUserId(), command.getRequestKey(), PointTransactionType.USE_CANCEL,
                 this::toUseCancelResult,
                 () -> restoreUsedPoints(useTransaction, command));
     }
 
     private UseResult deductPoints(UseCommand command) {
         LocalDateTime now = LocalDateTime.now(clock);
-        List<EarnedPoint> sources = earnedPointReader.usableInPriorityOrder(command.userId());
+        List<EarnedPoint> sources = earnedPointReader.usableInPriorityOrder(command.getUserId());
 
         long usable = sources.stream().mapToLong(EarnedPoint::getRemainingAmount).sum();
-        if (usable < command.amount()) {
+        if (usable < command.getAmount()) {
             throw PointException.of(ErrorCode.INSUFFICIENT_BALANCE,
-                    "사용 가능: %d, 요청: %d".formatted(usable, command.amount()));
+                    "사용 가능: %d, 요청: %d".formatted(usable, command.getAmount()));
         }
 
         PointTransaction useTransaction = transactionRepository.save(PointTransaction.use(
-                command.userId(), command.amount(), command.orderId(), command.requestKey(), now));
+                command.getUserId(), command.getAmount(), command.getOrderId(), command.getRequestKey(), now));
         deductInPriorityOrder(sources, useTransaction, now);
 
         return toUseResult(useTransaction);
@@ -95,13 +95,13 @@ public class PointUseService {
         List<PointUsage> usages = usagesOf(useTransaction);
 
         long cancelable = totalCancelableOf(usages);
-        if (command.amount() > cancelable) {
+        if (command.getAmount() > cancelable) {
             throw PointException.of(ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED,
-                    "취소 가능: %d, 요청: %d".formatted(cancelable, command.amount()));
+                    "취소 가능: %d, 요청: %d".formatted(cancelable, command.getAmount()));
         }
 
         PointTransaction cancelTransaction = transactionRepository.save(PointTransaction.useCancel(
-                useTransaction, command.amount(), command.requestKey(), now));
+                useTransaction, command.getAmount(), command.getRequestKey(), now));
         restoreInUsedOrder(usages, cancelTransaction, now);
 
         return toUseCancelResult(cancelTransaction);

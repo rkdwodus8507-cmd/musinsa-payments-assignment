@@ -88,30 +88,30 @@ public class PointPolicy {
 
     private void apply(PointPolicyValues values, LocalDateTime now) {
         validate(values);
-        this.minEarnAmount = values.minEarnAmount();
-        this.maxEarnAmount = values.maxEarnAmount();
-        this.maxUserBalance = values.maxUserBalance();
-        this.defaultExpireDays = values.defaultExpireDays();
-        this.minExpireDays = values.minExpireDays();
-        this.maxExpireDays = values.maxExpireDays();
+        this.minEarnAmount = values.getMinEarnAmount();
+        this.maxEarnAmount = values.getMaxEarnAmount();
+        this.maxUserBalance = values.getMaxUserBalance();
+        this.defaultExpireDays = values.getDefaultExpireDays();
+        this.minExpireDays = values.getMinExpireDays();
+        this.maxExpireDays = values.getMaxExpireDays();
         this.updatedAt = now;
     }
 
     private void validate(PointPolicyValues values) {
-        if (values.minEarnAmount() < 1 || values.maxEarnAmount() < values.minEarnAmount()) {
+        if (values.getMinEarnAmount() < 1 || values.getMaxEarnAmount() < values.getMinEarnAmount()) {
             throw PointException.of(ErrorCode.INVALID_POLICY, "적립 금액 범위가 올바르지 않습니다.");
         }
-        if (values.maxUserBalance() < values.maxEarnAmount()) {
+        if (values.getMaxUserBalance() < values.getMaxEarnAmount()) {
             throw PointException.of(ErrorCode.INVALID_POLICY, "최대 보유 포인트는 1회 최대 적립 포인트보다 커야 합니다.");
         }
-        if (values.minExpireDays() < 1 || values.maxExpireDays() < values.minExpireDays()) {
+        if (values.getMinExpireDays() < 1 || values.getMaxExpireDays() < values.getMinExpireDays()) {
             throw PointException.of(ErrorCode.INVALID_POLICY, "만료일 범위가 올바르지 않습니다.");
         }
-        if (values.maxExpireDays() > MAX_ALLOWED_EXPIRE_DAYS) {
+        if (values.getMaxExpireDays() > MAX_ALLOWED_EXPIRE_DAYS) {
             throw PointException.of(ErrorCode.INVALID_POLICY,
                     "만료일은 5년(%d일) 미만이어야 합니다.".formatted(MAX_ALLOWED_EXPIRE_DAYS + 1));
         }
-        if (values.defaultExpireDays() < values.minExpireDays() || values.defaultExpireDays() > values.maxExpireDays()) {
+        if (values.getDefaultExpireDays() < values.getMinExpireDays() || values.getDefaultExpireDays() > values.getMaxExpireDays()) {
             throw PointException.of(ErrorCode.INVALID_POLICY, "기본 만료일이 허용 범위를 벗어났습니다.");
         }
     }

@@ -19,10 +19,10 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
     void policyIsSeededFromProperties() {
         PolicyResult policy = policyService.findPolicy();
 
-        assertThat(policy.minEarnAmount()).isEqualTo(1);
-        assertThat(policy.maxEarnAmount()).isEqualTo(100_000);
-        assertThat(policy.maxUserBalance()).isEqualTo(1_000_000);
-        assertThat(policy.defaultExpireDays()).isEqualTo(365);
+        assertThat(policy.getMinEarnAmount()).isEqualTo(1);
+        assertThat(policy.getMaxEarnAmount()).isEqualTo(100_000);
+        assertThat(policy.getMaxUserBalance()).isEqualTo(1_000_000);
+        assertThat(policy.getDefaultExpireDays()).isEqualTo(365);
     }
 
     @Test
@@ -33,7 +33,7 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
         policyService.updatePolicy(new PointPolicyValues(
                 1, 200_000, 1_000_000, 365, 1, 1824));
 
-        assertThat(earn(200_000, null).amount()).isEqualTo(200_000);
+        assertThat(earn(200_000, null).getAmount()).isEqualTo(200_000);
     }
 
     @Test
@@ -44,7 +44,7 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
 
         earn(100_000, null);
         assertErrorCode(() -> earn(100_000, null), ErrorCode.MAX_BALANCE_EXCEEDED);
-        assertThat(earn(50_000, null).balance()).isEqualTo(150_000);
+        assertThat(earn(50_000, null).getBalance()).isEqualTo(150_000);
     }
 
     @Test
@@ -53,7 +53,7 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
         policyService.updatePolicy(new PointPolicyValues(
                 1, 100_000, 1_000_000, 30, 1, 1824));
 
-        assertThat(earn(1000, null).expireAt())
+        assertThat(earn(1000, null).getExpireAt())
                 .isEqualTo(clock.currentDateTime().plusDays(30));
     }
 

@@ -46,14 +46,14 @@ public class PointController {
     @PostMapping("/earn")
     public EarnResult earn(@Valid @RequestBody EarnRequest request) {
         return earnService.earn(EarnCommand.ofUser(
-                request.userId(), request.amount(), request.expireDays(), request.memo(), request.requestKey()));
+                request.getUserId(), request.getAmount(), request.getExpireDays(), request.getMemo(), request.getRequestKey()));
     }
 
     @Operation(summary = "포인트 적립 취소", description = "적립분이 일부라도 사용되었으면 취소할 수 없다.")
     @PostMapping("/earn/{pointKey}/cancel")
     public EarnCancelResult cancelEarn(@PathVariable String pointKey,
                                        @RequestBody(required = false) CancelEarnRequest request) {
-        String requestKey = request == null ? null : request.requestKey();
+        String requestKey = request == null ? null : request.getRequestKey();
         return earnService.cancelEarn(new CancelEarnCommand(pointKey, requestKey));
     }
 
@@ -61,14 +61,14 @@ public class PointController {
     @PostMapping("/use")
     public UseResult use(@Valid @RequestBody UseRequest request) {
         return useService.use(new UseCommand(
-                request.userId(), request.orderId(), request.amount(), request.requestKey()));
+                request.getUserId(), request.getOrderId(), request.getAmount(), request.getRequestKey()));
     }
 
     @Operation(summary = "포인트 사용 취소", description = "전체 또는 일부 취소 가능. 복원 대상이 만료된 경우 신규 적립으로 처리한다.")
     @PostMapping("/use/{pointKey}/cancel")
     public UseCancelResult cancelUse(@PathVariable String pointKey,
                                      @Valid @RequestBody CancelUseRequest request) {
-        return useService.cancelUse(new CancelUseCommand(pointKey, request.amount(), request.requestKey()));
+        return useService.cancelUse(new CancelUseCommand(pointKey, request.getAmount(), request.getRequestKey()));
     }
 
     @Operation(summary = "포인트 잔액 및 적립분 조회")

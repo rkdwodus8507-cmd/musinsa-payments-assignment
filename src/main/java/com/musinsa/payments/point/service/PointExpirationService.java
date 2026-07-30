@@ -19,16 +19,16 @@ public class PointExpirationService {
 
     public ExpirationResult expireAll() {
         LocalDateTime baseTime = LocalDateTime.now(clock);
-        int chunkSize = expirationProperties.chunkSize();
+        int chunkSize = expirationProperties.getChunkSize();
         int totalCount = 0;
         long totalAmount = 0;
 
         ExpirationResult chunk;
         do {
             chunk = expiredPointMarker.markChunk(baseTime, chunkSize);
-            totalCount += chunk.expiredCount();
-            totalAmount += chunk.expiredAmount();
-        } while (chunk.expiredCount() == chunkSize);
+            totalCount += chunk.getExpiredCount();
+            totalAmount += chunk.getExpiredAmount();
+        } while (chunk.getExpiredCount() == chunkSize);
 
         if (totalCount > 0) {
             log.info("expired {} earned points, {} points at {}", totalCount, totalAmount, baseTime);

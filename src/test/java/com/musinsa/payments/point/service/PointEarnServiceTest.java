@@ -26,15 +26,15 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     void defaultExpireDays() {
         EarnResult result = earn(1000, null);
 
-        assertThat(result.expireAt()).isEqualTo(MutableClock.INITIAL_TIME.plusDays(365));
-        assertThat(result.manual()).isFalse();
+        assertThat(result.getExpireAt()).isEqualTo(MutableClock.INITIAL_TIME.plusDays(365));
+        assertThat(result.isManual()).isFalse();
     }
 
     @ParameterizedTest(name = "{0}포인트 적립은 허용된다")
     @ValueSource(longs = {1, 50_000, 100_000})
     @DisplayName("1회 적립 가능 금액 경계값")
     void earnWithinPolicyRange(long amount) {
-        assertThat(earn(amount, null).amount()).isEqualTo(amount);
+        assertThat(earn(amount, null).getAmount()).isEqualTo(amount);
     }
 
     @ParameterizedTest(name = "{0}포인트 적립은 거절된다")
@@ -55,7 +55,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     @ValueSource(ints = {1, 365, 1824})
     @DisplayName("만료일 경계값")
     void earnWithValidExpireDays(int expireDays) {
-        assertThat(earn(1000, expireDays).expireAt())
+        assertThat(earn(1000, expireDays).getExpireAt())
                 .isEqualTo(MutableClock.INITIAL_TIME.plusDays(expireDays));
     }
 
@@ -78,16 +78,16 @@ class PointEarnServiceTest extends IntegrationTestSupport {
 
         BalanceResult balance = queryService.getBalance(USER_ID);
 
-        assertThat(balance.manualBalance()).isEqualTo(1000);
-        assertThat(balance.balance()).isEqualTo(2000);
-        assertThat(balance.lots())
-                .filteredOn(EarnedPointSummary::manual)
-                .extracting(EarnedPointSummary::earnPointKey)
-                .containsExactly(manual.pointKey());
-        assertThat(balance.lots())
-                .filteredOn(lot -> !lot.manual())
-                .extracting(EarnedPointSummary::earnPointKey)
-                .containsExactly(normal.pointKey());
+        assertThat(balance.getManualBalance()).isEqualTo(1000);
+        assertThat(balance.getBalance()).isEqualTo(2000);
+        assertThat(balance.getEarnedPoints())
+                .filteredOn(EarnedPointSummary::isManual)
+                .extracting(EarnedPointSummary::getEarnPointKey)
+                .containsExactly(manual.getPointKey());
+        assertThat(balance.getEarnedPoints())
+                .filteredOn(lot -> !lot.isManual())
+                .extracting(EarnedPointSummary::getEarnPointKey)
+                .containsExactly(normal.getPointKey());
     }
 
     @Test
@@ -95,12 +95,12 @@ class PointEarnServiceTest extends IntegrationTestSupport {
     void cancelUnusedEarn() {
         EarnResult earn = earn(1000, null);
 
-        EarnCancelResult result = cancelEarn(earn.pointKey());
+        EarnCancelResult result = cancelEarn(earn.getPointKey());
 
-        assertThat(result.amount()).isEqualTo(1000);
-        assertThat(result.balance()).isZero();
+        assertThat(result.getAmount()).isEqualTo(1000);
+        assertThat(result.getBalance()).isZero();
         assertThat(balanceOf(USER_ID)).isZero();
-        assertThat(lotStatusOf(earn.pointKey())).isEqualTo(EarnedPointStatus.CANCELED);
+        assertThat(lotStatusOf(earn.getPointKey())).isEqualTo(EarnedPointStatus.CANCELED);
     }
 
     @Test
@@ -109,16 +109,16 @@ class PointEarnServiceTest extends IntegrationTestSupport {
         EarnResult earn = earn(1000, null);
         use("ORDER-1", 100);
 
-        assertErrorCode(() -> cancelEarn(earn.pointKey()), ErrorCode.EARN_PARTIALLY_USED);
+        assertErrorCode(() -> cancelEarn(earn.getPointKey()), ErrorCode.EARN_PARTIALLY_USED);
     }
 
     @Test
     @DisplayName("이미 취소된 적립은 다시 취소할 수 없다")
     void cannotCancelTwice() {
         EarnResult earn = earn(1000, null);
-        cancelEarn(earn.pointKey());
+        cancelEarn(earn.getPointKey());
 
-        assertErrorCode(() -> cancelEarn(earn.pointKey()), ErrorCode.EARN_ALREADY_CANCELED);
+        assertErrorCode(() -> cancelEarn(earn.getPointKey()), ErrorCode.EARN_ALREADY_CANCELED);
     }
 
     @Test
@@ -127,7 +127,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
         EarnResult earn = earn(1000, 1);
         clock.plusDays(2);
 
-        assertErrorCode(() -> cancelEarn(earn.pointKey()), ErrorCode.EARN_ALREADY_EXPIRED);
+        assertErrorCode(() -> cancelEarn(earn.getPointKey()), ErrorCode.EARN_ALREADY_EXPIRED);
     }
 
     @Test
@@ -136,7 +136,7 @@ class PointEarnServiceTest extends IntegrationTestSupport {
         earn(1000, null);
         UseResult use = use("ORDER-1", 100);
 
-        assertErrorCode(() -> cancelEarn(use.pointKey()), ErrorCode.NOT_EARN_TRANSACTION);
+        assertErrorCode(() -> cancelEarn(use.getPointKey()), ErrorCode.NOT_EARN_TRANSACTION);
     }
 
     @Test
