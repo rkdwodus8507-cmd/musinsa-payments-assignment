@@ -5,8 +5,6 @@ import com.musinsa.payments.point.domain.PointPolicy;
 import com.musinsa.payments.point.domain.PointPolicyValues;
 import com.musinsa.payments.point.repository.PointPolicyRepository;
 import com.musinsa.payments.point.service.dto.PolicyResult;
-import com.musinsa.payments.point.support.error.ErrorCode;
-import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -18,25 +16,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class PointPolicyService {
 
     private final PointPolicyRepository policyRepository;
+    private final PointPolicyReader policyReader;
     private final PointPolicyProperties policyProperties;
     private final Clock clock;
 
     @Transactional(readOnly = true)
-    public PointPolicy getPolicy() {
-        return policyRepository.findById(PointPolicy.SINGLETON_ID)
-                .orElseThrow(() -> PointException.of(ErrorCode.POLICY_NOT_FOUND));
-    }
-
-    @Transactional(readOnly = true)
     public PolicyResult findPolicy() {
-        return PolicyResult.of(getPolicy());
+        return toResult(policyReader.current());
     }
 
     @Transactional
     public PolicyResult updatePolicy(PointPolicyValues values) {
-        PointPolicy policy = getPolicy();
+        PointPolicy policy = policyReader.current();
         policy.update(values, LocalDateTime.now(clock));
-        return PolicyResult.of(policy);
+        return toResult(policy);
     }
 
     @Transactional
@@ -45,5 +38,17 @@ public class PointPolicyService {
             return;
         }
         policyRepository.save(PointPolicy.create(policyProperties.toValues(), LocalDateTime.now(clock)));
+    }
+
+    private PolicyResult toResult(PointPolicy policy) {
+        PointPolicyValues values = policy.values();
+        return new PolicyResult(
+                values.minEarnAmount(),
+                values.maxEarnAmount(),
+                values.maxUserBalance(),
+                values.defaultExpireDays(),
+                values.minExpireDays(),
+                values.maxExpireDays(),
+                policy.getUpdatedAt());
     }
 }

@@ -35,7 +35,7 @@ public class PointUseService {
     private final PointUsageRepository usageRepository;
     private final PointUsageCancellationRepository cancellationRepository;
     private final EarnedPointReader earnedPointReader;
-    private final PointPolicyService policyService;
+    private final PointPolicyReader policyReader;
     private final UserPointLocker userPointLocker;
     private final PointTransactionReader transactionReader;
     private final PointIdempotencyGuard idempotencyGuard;
@@ -141,7 +141,7 @@ public class PointUseService {
     private EarnedPoint reissue(EarnedPoint expired, long amount, PointTransaction cancelTransaction, LocalDateTime now) {
         PointTransaction reissuedTransaction = transactionRepository.save(
                 PointTransaction.reissuedEarn(expired, amount, cancelTransaction, REISSUE_MEMO, now));
-        LocalDateTime expireAt = now.plusDays(policyService.getPolicy().getDefaultExpireDays());
+        LocalDateTime expireAt = now.plusDays(policyReader.current().getDefaultExpireDays());
 
         return earnedPointRepository.save(EarnedPoint.from(reissuedTransaction, expired.isManual(), expireAt, now));
     }

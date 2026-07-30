@@ -2,7 +2,7 @@
 
 무신사페이먼츠 Backend Engineer 과제. 무료 포인트의 **적립 / 적립취소 / 사용 / 사용취소**를 제공하는 REST API입니다.
 
-포인트는 금전과 동일하게 다뤄야 하므로, 이 구현의 최우선 목표는 **어떤 시점에도 잔액과 원장이 어긋나지 않는 것**입니다. 그 목표에서 나온 설계 결정들을 아래 [핵심 설계 결정](#핵심-설계-결정)에 정리했습니다.
+포인트는 금전과 동일하게 다뤄야 하므로, 이 구현의 최우선 목표는 **어떤 시점에도 잔액과 원장이 어긋나지 않는 것**입니다. 그 목표에서 나온 설계 결정들을 아래 [핵심 설계 결정](#6-핵심-설계-결정)에 정리했습니다.
 
 ---
 
@@ -92,9 +92,33 @@ DDL과 인덱스는 [`src/main/resources/db/schema.sql`](src/main/resources/db/s
 
 ---
 
-## 5. 핵심 설계 결정
+## 5. 계층 구조
 
-### 5-1. 잔액을 컬럼으로 저장하지 않는다
+`controller → service → repository` 입니다. facade 는 두지 않았습니다. 컨트롤러 메서드 11개 전부가 서비스 메서드를 **정확히 하나만** 호출하므로, facade 를 넣으면 위임만 하는 층이 하나 늘어날 뿐입니다. 한 요청이 여러 서비스를 조율해야 하는 순간이 오면 그때 facade 를 넣는 게 맞다고 봤습니다.
+
+지키는 규칙은 세 가지입니다.
+
+**엔티티는 서비스 계층을 벗어나지 않습니다.** 컨트롤러 반환 타입은 전부 record DTO 이고, `service/dto` 의 어떤 record 도 엔티티를 import 하지 않습니다. 예전에는 `PolicyResult.of(PointPolicy)` 처럼 응답 DTO 가 엔티티를 알고 있었는데, 매핑을 `PointPolicyService` 안으로 옮기고 DTO 는 순수 record 로 되돌렸습니다.
+
+**서비스가 다른 서비스를 호출하지 않습니다.** `PointEarnService` / `PointUseService` 가 정책을 읽으려고 `PointPolicyService` 를 호출하고 있었는데, `PointPolicyReader` 를 두고 그쪽을 보게 했습니다. `EarnedPointReader`, `PointTransactionReader` 와 같은 결입니다 — 리포지토리를 감싸 도메인 예외를 던지는 서비스 계층 조회 담당입니다.
+
+**컨트롤러는 리포지토리도 설정도 보지 않습니다.** 만료 배치 청크 크기를 컨트롤러가 `PointExpirationProperties` 에서 꺼내 넘기고 있었는데, 서비스가 직접 읽도록 바꿨습니다.
+
+의존 방향은 전부 안쪽(도메인)을 향합니다.
+
+```
+api ────────► service ────────► repository ────────► domain
+ │                │                                    ▲
+ └────────────────┴────────────────────────────────────┘
+```
+
+`api → domain` 이 한 군데 있습니다. `UpdatePolicyRequest.toValues()` 가 도메인 값 객체 `PointPolicyValues` 를 만드는 부분입니다. 엔티티도 응답도 아니고 방향이 안쪽이라 그대로 뒀습니다. 이걸 없애려면 같은 6개 필드를 가진 레코드를 서비스 계층에 하나 더 만들어야 하는데, 중복을 늘리는 대가가 더 크다고 판단했습니다.
+
+---
+
+## 6. 핵심 설계 결정
+
+### 6-1. 잔액을 컬럼으로 저장하지 않는다
 
 `user_point_lock.balance` 같은 캐시 컬럼 없이, 잔액은 항상 이렇게 계산합니다.
 
@@ -108,7 +132,7 @@ WHERE user_id = ? AND status = 'AVAILABLE' AND expire_at > now()
 
 적립분이 수만 건까지 쌓이면 합산 비용이 문제가 됩니다. 그때는 스냅샷 테이블을 두되 원장을 정본으로 유지하는 방향이 맞다고 봅니다.
 
-### 5-2. `user_point_lock` 은 잔액이 아니라 락을 위해 존재한다
+### 6-2. `user_point_lock` 은 잔액이 아니라 락을 위해 존재한다
 
 검사와 반영 사이가 원자적이어야 하므로, 네 가지 연산 모두 진입부에서 사용자 행을 먼저 잠급니다.
 
@@ -120,7 +144,7 @@ userPointLocker.lock(userId);   // SELECT ... FOR UPDATE
 
 > 처음엔 `REQUIRES_NEW` 중첩 트랜잭션으로 락 행을 만들었는데, 요청 하나가 커넥션 2개를 잡아 동시 요청이 풀 크기를 넘으면 교착에 빠졌습니다. 동시성 테스트에서 드러나 upsert 로 교체했습니다. (`MERGE ... KEY` 는 H2 문법이라 MySQL 에선 `INSERT ... ON DUPLICATE KEY UPDATE` 로 바꿔야 합니다.)
 
-### 5-3. 정책값은 DB에 두고 API로 바꾼다
+### 6-3. 정책값은 DB에 두고 API로 바꾼다
 
 yml `@ConfigurationProperties` 는 값을 바꾸려면 재기동해야 해서, "별도의 방법으로 변경 가능"이라는 요구를 온전히 만족하지 못한다고 봤습니다. 그래서 `point_policy` 테이블 + 관리자 API 로 두고, yml 값은 최초 기동 시 시딩용으로만 씁니다.
 
@@ -133,7 +157,7 @@ curl -X PUT http://localhost:8080/api/v1/admin/points/policies \
 
 `maxExpireDays` 상한 **1824일**은 "5년 미만"을 일 단위로 옮긴 값입니다. 이건 시스템 불변식이라 정책값으로 열지 않고 도메인에서 고정 검증합니다.
 
-### 5-4. 사용 순서와 사용취소 순서
+### 6-4. 사용 순서와 사용취소 순서
 
 **사용**: `manual DESC, expire_at ASC, id ASC` — 수기지급분 우선, 그다음 만료 임박 순.
 
@@ -141,7 +165,7 @@ curl -X PUT http://localhost:8080/api/v1/admin/points/policies \
 
 **만료분 복원**: 복원 대상이 만료됐으면 되살릴 수 없으므로 새 EARN 거래와 적립분을 만듭니다(예시의 E). 만료일은 정책 기본값으로 새로 부여하고 `manual` 은 원래 적립분에서 승계합니다 — 수기지급분이 일반 적립분으로 바뀌면 사용 우선순위가 밀려 사용자에게 불리하기 때문입니다.
 
-### 5-5. 만료 처리
+### 6-5. 만료 처리
 
 잔액 계산은 `expire_at > now()` 로 실시간 판정하고, 배치(기본 매일 04:00)는 지난 적립분을 `EXPIRED` 로 전이시켜 이력을 남기고 조회 대상을 줄이는 역할만 합니다.
 
@@ -149,7 +173,7 @@ curl -X PUT http://localhost:8080/api/v1/admin/points/policies \
 
 수동 실행: `POST /api/v1/admin/points/expirations`
 
-### 5-6. 읽는 순서가 곧 처리 순서
+### 6-6. 읽는 순서가 곧 처리 순서
 
 공개 메서드 네 개는 모두 같은 모양입니다. 위에서 아래로 읽으면 무슨 일이 일어나는지 다 드러나고, 궁금한 단계만 펼쳐 보면 됩니다.
 
@@ -180,7 +204,7 @@ PointUsage.of(useTransaction, source, amount, now)
 
 `of(userId, EARN, amount, null, null, requestKey, memo, now)` 처럼 null 이 늘어서면 몇 번째가 무엇인지 알 수 없습니다. 엔티티를 넘기면 필요한 값은 그 안에서 꺼내므로 인자가 줄고 뜻이 분명해집니다.
 
-### 5-7. 멱등성은 락 안에서 판정한다
+### 6-7. 멱등성은 락 안에서 판정한다
 
 네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다. 그래서 재시도한 클라이언트도 같은 `pointKey` 를 받습니다.
 
@@ -205,11 +229,11 @@ public UseResult use(UseCommand command) {
 
 ---
 
-## 6. API
+## 7. API
 
 전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
 
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [5-7](#5-7-멱등성은-락-안에서-판정한다) 참고.
+네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-7](#6-7-멱등성은-락-안에서-판정한다) 참고.
 
 ### 포인트
 
@@ -305,7 +329,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 
 ---
 
-## 7. 테스트
+## 8. 테스트
 
 ```bash
 ./gradlew test
@@ -333,7 +357,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 
 ---
 
-## 8. 명세에 없어 가정한 사항
+## 9. 명세에 없어 가정한 사항
 
 명세에 명시되지 않아 판단이 필요했던 부분과 그 근거입니다.
 
@@ -354,7 +378,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 
 ---
 
-## 9. 프로젝트 구조
+## 10. 프로젝트 구조
 
 ```
 src/main/java/com/musinsa/payments/point/
@@ -379,13 +403,14 @@ src/main/java/com/musinsa/payments/point/
 │   ├── PointIdempotencyGuard   requestKey 중복 판정
 │   ├── EarnedPointReader       적립분·잔액 조회
 │   ├── PointTransactionReader  거래 조회와 종류 검증
+│   ├── PointPolicyReader       현재 정책 조회
 │   └── dto/                    커맨드 / 결과 record
 └── support/error/        에러 코드, 예외, 전역 핸들러
 ```
 
 금액 계산 규칙과 상태 전이 조건은 서비스가 아니라 **엔티티 안**에 있습니다. 잘못된 차감·복원은 서비스 어디서 호출하든 엔티티에서 막힙니다.
 
-공개 비즈니스 메서드는 모두 같은 세 줄로 읽힙니다 — **락 → 멱등성 판정 → 실제 처리**. 자세한 내용은 [5-6](#5-6-읽는-순서가-곧-처리-순서) 에 정리했습니다.
+공개 비즈니스 메서드는 모두 같은 세 줄로 읽힙니다 — **락 → 멱등성 판정 → 실제 처리**. 자세한 내용은 [6-6](#6-6-읽는-순서가-곧-처리-순서) 에 정리했습니다.
 
 주석은 두지 않았습니다. 이름으로 설명되지 않는 코드가 있으면 이름을 고쳤습니다.
 
@@ -402,7 +427,7 @@ src/main/java/com/musinsa/payments/point/
 
 ---
 
-## 10. 한계와 개선 방향
+## 11. 한계와 개선 방향
 
 - **멱등성 키에 요청 본문 해시를 함께 저장하지 않습니다.** 같은 `requestKey` 에 다른 금액이 오면 최초 결과를 반환합니다. 엄격히는 422 로 거절해야 맞습니다.
 - **잔액 조회가 매번 합산입니다.** 5-1에 적은 대로 적립분이 많아지면 스냅샷 도입이 필요합니다.

@@ -44,7 +44,7 @@ class PointScenarioTest extends IntegrationTestSupport {
         assertThat(earnedPointOf(b).getRemainingAmount()).isEqualTo(300);
 
         clock.plusDays(31);
-        expirationService.expireAll(500);
+        expirationService.expireAll();
         assertThat(earnedPointOf(a).getStatus()).isEqualTo(EarnedPointStatus.EXPIRED);
         assertThat(balanceOf(USER_ID)).isEqualTo(300);
 

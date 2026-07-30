@@ -1,5 +1,6 @@
 package com.musinsa.payments.point.service;
 
+import com.musinsa.payments.point.config.PointExpirationProperties;
 import com.musinsa.payments.point.service.dto.ExpirationResult;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -13,10 +14,12 @@ import org.springframework.stereotype.Service;
 public class PointExpirationService {
 
     private final ExpiredPointMarker expiredPointMarker;
+    private final PointExpirationProperties expirationProperties;
     private final Clock clock;
 
-    public ExpirationResult expireAll(int chunkSize) {
+    public ExpirationResult expireAll() {
         LocalDateTime baseTime = LocalDateTime.now(clock);
+        int chunkSize = expirationProperties.chunkSize();
         int totalCount = 0;
         long totalAmount = 0;
 

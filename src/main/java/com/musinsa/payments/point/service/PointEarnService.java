@@ -25,7 +25,7 @@ public class PointEarnService {
     private final PointTransactionRepository transactionRepository;
     private final EarnedPointRepository earnedPointRepository;
     private final EarnedPointReader earnedPointReader;
-    private final PointPolicyService policyService;
+    private final PointPolicyReader policyReader;
     private final UserPointLocker userPointLocker;
     private final PointTransactionReader transactionReader;
     private final PointIdempotencyGuard idempotencyGuard;
@@ -52,7 +52,7 @@ public class PointEarnService {
 
     private EarnResult grantPoints(EarnCommand command) {
         LocalDateTime now = LocalDateTime.now(clock);
-        PointPolicy policy = policyService.getPolicy();
+        PointPolicy policy = policyReader.current();
 
         policy.validateEarnAmount(command.amount());
         policy.validateBalanceAfterEarn(earnedPointReader.balanceOf(command.userId()), command.amount());

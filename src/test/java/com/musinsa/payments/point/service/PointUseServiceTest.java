@@ -121,7 +121,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         manualEarn(1000, 5);
         UseResult use = use(ORDER_ID, 1000);
         clock.plusDays(6);
-        expirationService.expireAll(100);
+        expirationService.expireAll();
 
         cancelUse(use.pointKey(), 1000);
 

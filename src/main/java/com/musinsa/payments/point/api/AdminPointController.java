@@ -2,7 +2,6 @@ package com.musinsa.payments.point.api;
 
 import com.musinsa.payments.point.api.dto.EarnRequest;
 import com.musinsa.payments.point.api.dto.UpdatePolicyRequest;
-import com.musinsa.payments.point.config.PointExpirationProperties;
 import com.musinsa.payments.point.service.PointEarnService;
 import com.musinsa.payments.point.service.PointExpirationService;
 import com.musinsa.payments.point.service.PointPolicyService;
@@ -30,7 +29,6 @@ public class AdminPointController {
     private final PointEarnService earnService;
     private final PointPolicyService policyService;
     private final PointExpirationService expirationService;
-    private final PointExpirationProperties expirationProperties;
 
     @Operation(summary = "관리자 수기 적립", description = "수기지급 포인트는 사용 시 우선 차감된다.")
     @PostMapping("/earn")
@@ -54,6 +52,6 @@ public class AdminPointController {
     @Operation(summary = "만료 배치 수동 실행")
     @PostMapping("/expirations")
     public ExpirationResult expire() {
-        return expirationService.expireAll(expirationProperties.chunkSize());
+        return expirationService.expireAll();
     }
 }
