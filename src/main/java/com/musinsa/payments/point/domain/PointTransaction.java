@@ -87,14 +87,6 @@ public class PointTransaction {
         return transaction;
     }
 
-    public boolean isEarn() {
-        return type == PointTransactionType.EARN;
-    }
-
-    public boolean isUse() {
-        return type == PointTransactionType.USE;
-    }
-
     private static PointTransaction newTransaction(Long userId, PointTransactionType type, long amount, LocalDateTime now) {
         PointTransaction transaction = new PointTransaction();
         transaction.pointKey = UUID.randomUUID().toString();

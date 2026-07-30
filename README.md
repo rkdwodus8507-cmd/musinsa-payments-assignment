@@ -389,6 +389,17 @@ src/main/java/com/musinsa/payments/point/
 
 주석은 두지 않았습니다. 이름으로 설명되지 않는 코드가 있으면 이름을 고쳤습니다.
 
+중복은 스캐너로 훑어서 3줄 이상 반복되는 실행문 블록을 22건 → 2건으로 줄였습니다. 없앤 것은 이런 것들입니다.
+
+- 네 연산에 똑같이 반복되던 `락 → requestKey 조회 → 있으면 재현 / 없으면 처리` 6줄 → `PointIdempotencyGuard.runOnce(...)`
+- `earnByPointKey` / `useByPointKey` 의 조회 + 종류검증 본문 → 기대 타입과 에러코드만 받는 하나의 private 메서드
+- 정책 6개 값을 `create` / `update` / `apply` / 커맨드 DTO 가 각각 나열하던 것 → `PointPolicyValues` 하나로
+- 테스트의 `assertErrorCode`(3중복)와 스레드 실행 블록(2중복) → `IntegrationTestSupport` 로
+
+남긴 2건은 지우면 손해라고 봤습니다. `UpdatePolicyRequest.toValues()` / `PointPolicyProperties.toValues()` 는 HTTP 요청과 설정 파일이라는 서로 다른 경계가 각자 자기 매핑을 갖는 게 맞고, 합치려면 도메인 레코드에 `@ConfigurationProperties` 를 붙여야 합니다. `PointUsage` 에서 서로 다른 두 DTO 를 만드는 부분도 겹치는 건 접근자 3개뿐이라, 합치면 도메인이 응답 DTO 를 알게 됩니다.
+
+`deductInPriorityOrder` 와 `restoreInUsedOrder` 도 루프 모양은 같지만 합치지 않았습니다. `ToLongFunction` / `ObjLongConsumer` 를 받는 제네릭 메서드로 바꾸면 중복 10줄은 사라지지만, "우선순위 순으로 차감한다"와 "사용된 순서대로 되돌린다"가 둘 다 읽히지 않게 됩니다.
+
 ---
 
 ## 10. 한계와 개선 방향

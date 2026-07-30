@@ -10,7 +10,6 @@ import com.musinsa.payments.point.service.dto.EarnCommand;
 import com.musinsa.payments.point.service.dto.EarnResult;
 import com.musinsa.payments.point.service.dto.ExpirationResult;
 import com.musinsa.payments.point.service.dto.PolicyResult;
-import com.musinsa.payments.point.service.dto.UpdatePolicyCommand;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -49,13 +48,7 @@ public class AdminPointController {
     @Operation(summary = "포인트 정책 변경", description = "1회 최대 적립금액, 개인 최대 보유금액, 만료일 범위를 무중단으로 변경한다.")
     @PutMapping("/policies")
     public PolicyResult updatePolicy(@Valid @RequestBody UpdatePolicyRequest request) {
-        return policyService.updatePolicy(new UpdatePolicyCommand(
-                request.minEarnAmount(),
-                request.maxEarnAmount(),
-                request.maxUserBalance(),
-                request.defaultExpireDays(),
-                request.minExpireDays(),
-                request.maxExpireDays()));
+        return policyService.updatePolicy(request.toValues());
     }
 
     @Operation(summary = "만료 배치 수동 실행")

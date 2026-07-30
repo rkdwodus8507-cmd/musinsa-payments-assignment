@@ -6,6 +6,8 @@ import com.musinsa.payments.point.repository.PointTransactionRepository;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +17,19 @@ public class PointIdempotencyGuard {
 
     private final PointTransactionRepository transactionRepository;
 
-    public Optional<PointTransaction> findHandled(Long userId, String requestKey, PointTransactionType type) {
+    public <T> T runOnce(Long userId,
+                         String requestKey,
+                         PointTransactionType type,
+                         Function<PointTransaction, T> whenAlreadyHandled,
+                         Supplier<T> whenFirstRequest) {
+        Optional<PointTransaction> handled = findHandled(userId, requestKey, type);
+        if (handled.isPresent()) {
+            return whenAlreadyHandled.apply(handled.get());
+        }
+        return whenFirstRequest.get();
+    }
+
+    private Optional<PointTransaction> findHandled(Long userId, String requestKey, PointTransactionType type) {
         if (requestKey == null || requestKey.isBlank()) {
             return Optional.empty();
         }

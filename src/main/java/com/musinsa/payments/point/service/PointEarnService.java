@@ -14,7 +14,6 @@ import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,12 +35,9 @@ public class PointEarnService {
     public EarnResult earn(EarnCommand command) {
         userPointLocker.lock(command.userId());
 
-        Optional<PointTransaction> alreadyEarned =
-                idempotencyGuard.findHandled(command.userId(), command.requestKey(), PointTransactionType.EARN);
-        if (alreadyEarned.isPresent()) {
-            return toEarnResult(alreadyEarned.get());
-        }
-        return grantPoints(command);
+        return idempotencyGuard.runOnce(command.userId(), command.requestKey(), PointTransactionType.EARN,
+                this::toEarnResult,
+                () -> grantPoints(command));
     }
 
     @Transactional
@@ -49,12 +45,9 @@ public class PointEarnService {
         PointTransaction earnTransaction = transactionReader.earnByPointKey(command.earnPointKey());
         userPointLocker.lock(earnTransaction.getUserId());
 
-        Optional<PointTransaction> alreadyCanceled = idempotencyGuard.findHandled(
-                earnTransaction.getUserId(), command.requestKey(), PointTransactionType.EARN_CANCEL);
-        if (alreadyCanceled.isPresent()) {
-            return toEarnCancelResult(alreadyCanceled.get());
-        }
-        return takeBackPoints(earnTransaction, command.requestKey());
+        return idempotencyGuard.runOnce(earnTransaction.getUserId(), command.requestKey(), PointTransactionType.EARN_CANCEL,
+                this::toEarnCancelResult,
+                () -> takeBackPoints(earnTransaction, command.requestKey()));
     }
 
     private EarnResult grantPoints(EarnCommand command) {

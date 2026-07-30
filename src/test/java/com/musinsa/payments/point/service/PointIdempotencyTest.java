@@ -10,12 +10,6 @@ import com.musinsa.payments.point.service.dto.UseResult;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -113,32 +107,13 @@ class PointIdempotencyTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("같은 requestKey 로 동시에 10건이 들어와도 차감은 한 번만 일어난다")
-    void concurrentDuplicatedUseDeductsOnce() throws InterruptedException {
+    void concurrentDuplicatedUseDeductsOnce() {
         earn(500, null);
 
-        int threadCount = 10;
-        Set<String> pointKeys = ConcurrentHashMap.newKeySet();
-        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-        CountDownLatch start = new CountDownLatch(1);
-        CountDownLatch done = new CountDownLatch(threadCount);
+        ConcurrentRun<UseResult> run = runConcurrently(10, index -> useWithKey(100, REQUEST_KEY));
 
-        for (int i = 0; i < threadCount; i++) {
-            executor.submit(() -> {
-                try {
-                    start.await();
-                    pointKeys.add(useWithKey(100, REQUEST_KEY).pointKey());
-                } catch (Exception e) {
-                    pointKeys.add("failed: " + e.getClass().getSimpleName());
-                } finally {
-                    done.countDown();
-                }
-            });
-        }
-        start.countDown();
-        done.await(30, TimeUnit.SECONDS);
-        executor.shutdown();
-
-        assertThat(pointKeys).hasSize(1);
+        assertThat(run.successCount()).as("실패 원인: %s", run.failures()).isEqualTo(10);
+        assertThat(run.successes()).extracting(UseResult::pointKey).containsOnly(run.successes().get(0).pointKey());
         assertThat(balanceOf(USER_ID)).isEqualTo(400);
         assertThat(usageRepository.findByOrderIdOrderByIdAsc(ORDER_ID)).hasSize(1);
     }

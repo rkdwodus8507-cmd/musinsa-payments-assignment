@@ -8,12 +8,11 @@ import com.musinsa.payments.point.service.dto.UseResult;
 import com.musinsa.payments.point.service.dto.UsedPointDetail;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import com.musinsa.payments.point.support.error.ErrorCode;
-import com.musinsa.payments.point.support.error.PointException;
+import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 @DisplayName("포인트 사용 / 사용취소")
@@ -29,11 +28,9 @@ class PointUseServiceTest extends IntegrationTestSupport {
 
         UseResult use = use(ORDER_ID, 700);
 
-        assertThat(use.details())
-                .extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
-                .containsExactly(
-                        tuple(manualLater.pointKey(), 500L),
-                        tuple(normalSoon.pointKey(), 200L));
+        assertUsedInOrder(use,
+                tuple(manualLater.pointKey(), 500L),
+                tuple(normalSoon.pointKey(), 200L));
     }
 
     @Test
@@ -44,11 +41,9 @@ class PointUseServiceTest extends IntegrationTestSupport {
 
         UseResult use = use(ORDER_ID, 400);
 
-        assertThat(use.details())
-                .extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
-                .containsExactly(
-                        tuple(sooner.pointKey(), 300L),
-                        tuple(later.pointKey(), 100L));
+        assertUsedInOrder(use,
+                tuple(sooner.pointKey(), 300L),
+                tuple(later.pointKey(), 100L));
     }
 
     @Test
@@ -60,12 +55,10 @@ class PointUseServiceTest extends IntegrationTestSupport {
 
         UseResult use = use(ORDER_ID, 750);
 
-        assertThat(use.details())
-                .extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
-                .containsExactly(
-                        tuple(sooner.pointKey(), 300L),
-                        tuple(middle.pointKey(), 300L),
-                        tuple(later.pointKey(), 150L));
+        assertUsedInOrder(use,
+                tuple(sooner.pointKey(), 300L),
+                tuple(middle.pointKey(), 300L),
+                tuple(later.pointKey(), 150L));
     }
 
     @Test
@@ -78,8 +71,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         assertThat(balanceOf(USER_ID)).isEqualTo(500);
         assertErrorCode(() -> use(ORDER_ID, 600), ErrorCode.INSUFFICIENT_BALANCE);
 
-        UseResult use = use(ORDER_ID, 500);
-        assertThat(use.details()).hasSize(1);
+        assertThat(use(ORDER_ID, 500).details()).hasSize(1);
     }
 
     @Test
@@ -93,7 +85,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("전액 사용취소하면 원 적립분이 그대로 복원된다")
-    void fullCancelRestoresOriginalLots() {
+    void fullCancelRestoresOriginalPoints() {
         EarnResult a = earn(1000, 10);
         EarnResult b = earn(500, 365);
         UseResult use = use(ORDER_ID, 1200);
@@ -103,9 +95,7 @@ class PointUseServiceTest extends IntegrationTestSupport {
         assertThat(cancel.balance()).isEqualTo(1500);
         assertThat(cancel.remainingCancelableAmount()).isZero();
         assertThat(cancel.details())
-                .extracting(CanceledPointDetail::earnPointKey,
-                        CanceledPointDetail::amount,
-                        CanceledPointDetail::reissued)
+                .extracting(CanceledPointDetail::earnPointKey, CanceledPointDetail::amount, CanceledPointDetail::reissued)
                 .containsExactly(
                         tuple(a.pointKey(), 1000L, false),
                         tuple(b.pointKey(), 200L, false));
@@ -179,10 +169,9 @@ class PointUseServiceTest extends IntegrationTestSupport {
         assertErrorCode(() -> cancelUse(earn.pointKey(), 100), ErrorCode.NOT_USE_TRANSACTION);
     }
 
-    private void assertErrorCode(Runnable runnable, ErrorCode expected) {
-        assertThatThrownBy(runnable::run)
-                .isInstanceOf(PointException.class)
-                .extracting(e -> ((PointException) e).getErrorCode())
-                .isEqualTo(expected);
+    private void assertUsedInOrder(UseResult use, Tuple... expectedInOrder) {
+        assertThat(use.details())
+                .extracting(UsedPointDetail::earnPointKey, UsedPointDetail::amount)
+                .containsExactly(expectedInOrder);
     }
 }

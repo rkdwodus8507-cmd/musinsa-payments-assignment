@@ -2,9 +2,9 @@ package com.musinsa.payments.point.service;
 
 import com.musinsa.payments.point.config.PointPolicyProperties;
 import com.musinsa.payments.point.domain.PointPolicy;
+import com.musinsa.payments.point.domain.PointPolicyValues;
 import com.musinsa.payments.point.repository.PointPolicyRepository;
 import com.musinsa.payments.point.service.dto.PolicyResult;
-import com.musinsa.payments.point.service.dto.UpdatePolicyCommand;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
@@ -29,21 +29,14 @@ public class PointPolicyService {
 
     @Transactional(readOnly = true)
     public PolicyResult findPolicy() {
-        return toResult(getPolicy());
+        return PolicyResult.of(getPolicy());
     }
 
     @Transactional
-    public PolicyResult updatePolicy(UpdatePolicyCommand command) {
+    public PolicyResult updatePolicy(PointPolicyValues values) {
         PointPolicy policy = getPolicy();
-        policy.update(
-                command.minEarnAmount(),
-                command.maxEarnAmount(),
-                command.maxUserBalance(),
-                command.defaultExpireDays(),
-                command.minExpireDays(),
-                command.maxExpireDays(),
-                LocalDateTime.now(clock));
-        return toResult(policy);
+        policy.update(values, LocalDateTime.now(clock));
+        return PolicyResult.of(policy);
     }
 
     @Transactional
@@ -51,24 +44,6 @@ public class PointPolicyService {
         if (policyRepository.existsById(PointPolicy.SINGLETON_ID)) {
             return;
         }
-        policyRepository.save(PointPolicy.create(
-                policyProperties.minEarnAmount(),
-                policyProperties.maxEarnAmount(),
-                policyProperties.maxUserBalance(),
-                policyProperties.defaultExpireDays(),
-                policyProperties.minExpireDays(),
-                policyProperties.maxExpireDays(),
-                LocalDateTime.now(clock)));
-    }
-
-    private PolicyResult toResult(PointPolicy policy) {
-        return new PolicyResult(
-                policy.getMinEarnAmount(),
-                policy.getMaxEarnAmount(),
-                policy.getMaxUserBalance(),
-                policy.getDefaultExpireDays(),
-                policy.getMinExpireDays(),
-                policy.getMaxExpireDays(),
-                policy.getUpdatedAt());
+        policyRepository.save(PointPolicy.create(policyProperties.toValues(), LocalDateTime.now(clock)));
     }
 }

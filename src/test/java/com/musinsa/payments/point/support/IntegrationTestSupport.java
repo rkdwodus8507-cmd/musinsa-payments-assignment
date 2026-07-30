@@ -19,10 +19,21 @@ import com.musinsa.payments.point.service.dto.EarnResult;
 import com.musinsa.payments.point.service.dto.UseCancelResult;
 import com.musinsa.payments.point.service.dto.UseCommand;
 import com.musinsa.payments.point.service.dto.UseResult;
+import com.musinsa.payments.point.support.error.ErrorCode;
+import com.musinsa.payments.point.support.error.PointException;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.IntFunction;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @Import(TestClockConfig.class)
@@ -100,5 +111,54 @@ public abstract class IntegrationTestSupport {
 
     protected long balanceOf(long userId) {
         return queryService.getBalance(userId).balance();
+    }
+
+    protected void assertErrorCode(Runnable action, ErrorCode expected) {
+        assertThatThrownBy(action::run)
+                .isInstanceOf(PointException.class)
+                .extracting(e -> ((PointException) e).getErrorCode())
+                .isEqualTo(expected);
+    }
+
+    protected <T> ConcurrentRun<T> runConcurrently(int threadCount, IntFunction<T> task) {
+        List<T> successes = Collections.synchronizedList(new java.util.ArrayList<>());
+        List<String> failures = Collections.synchronizedList(new java.util.ArrayList<>());
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threadCount);
+
+        for (int i = 0; i < threadCount; i++) {
+            int index = i;
+            executor.submit(() -> {
+                try {
+                    start.await();
+                    successes.add(task.apply(index));
+                } catch (Exception e) {
+                    failures.add(e.getClass().getSimpleName() + ": " + e.getMessage());
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        start.countDown();
+        try {
+            done.await(30, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        executor.shutdown();
+        return new ConcurrentRun<>(successes, failures);
+    }
+
+    protected record ConcurrentRun<T>(List<T> successes, List<String> failures) {
+
+        public int successCount() {
+            return successes.size();
+        }
+
+        public int failureCount() {
+            return failures.size();
+        }
     }
 }

@@ -17,7 +17,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("포인트 적립 / 적립취소")
 class PointEarnServiceTest extends IntegrationTestSupport {
@@ -163,10 +162,4 @@ class PointEarnServiceTest extends IntegrationTestSupport {
                 .getStatus();
     }
 
-    private void assertErrorCode(Runnable runnable, ErrorCode expected) {
-        assertThatThrownBy(runnable::run)
-                .isInstanceOf(PointException.class)
-                .extracting(e -> ((PointException) e).getErrorCode())
-                .isEqualTo(expected);
-    }
 }

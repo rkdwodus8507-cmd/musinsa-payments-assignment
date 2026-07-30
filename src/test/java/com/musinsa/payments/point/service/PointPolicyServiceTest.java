@@ -1,7 +1,7 @@
 package com.musinsa.payments.point.service;
 
 import com.musinsa.payments.point.service.dto.PolicyResult;
-import com.musinsa.payments.point.service.dto.UpdatePolicyCommand;
+import com.musinsa.payments.point.domain.PointPolicyValues;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
@@ -30,7 +30,7 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
     void maxEarnAmountIsChangeableAtRuntime() {
         assertThatThrownBy(() -> earn(200_000, null)).isInstanceOf(PointException.class);
 
-        policyService.updatePolicy(new UpdatePolicyCommand(
+        policyService.updatePolicy(new PointPolicyValues(
                 1, 200_000, 1_000_000, 365, 1, 1824));
 
         assertThat(earn(200_000, null).amount()).isEqualTo(200_000);
@@ -39,7 +39,7 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("개인별 최대 보유금액을 변경하면 재기동 없이 즉시 반영된다")
     void maxUserBalanceIsChangeableAtRuntime() {
-        policyService.updatePolicy(new UpdatePolicyCommand(
+        policyService.updatePolicy(new PointPolicyValues(
                 1, 100_000, 150_000, 365, 1, 1824));
 
         earn(100_000, null);
@@ -50,7 +50,7 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("기본 만료일을 변경하면 이후 적립부터 적용된다")
     void defaultExpireDaysIsChangeableAtRuntime() {
-        policyService.updatePolicy(new UpdatePolicyCommand(
+        policyService.updatePolicy(new PointPolicyValues(
                 1, 100_000, 1_000_000, 30, 1, 1824));
 
         assertThat(earn(1000, null).expireAt())
@@ -60,21 +60,15 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
     @Test
     @DisplayName("최대 만료일은 5년 미만까지만 설정할 수 있다")
     void maxExpireDaysCannotReachFiveYears() {
-        assertErrorCode(() -> policyService.updatePolicy(new UpdatePolicyCommand(
+        assertErrorCode(() -> policyService.updatePolicy(new PointPolicyValues(
                 1, 100_000, 1_000_000, 365, 1, 1825)), ErrorCode.INVALID_POLICY);
     }
 
     @Test
     @DisplayName("최대 보유금액은 1회 최대 적립금액보다 작을 수 없다")
     void maxUserBalanceMustCoverMaxEarnAmount() {
-        assertErrorCode(() -> policyService.updatePolicy(new UpdatePolicyCommand(
+        assertErrorCode(() -> policyService.updatePolicy(new PointPolicyValues(
                 1, 100_000, 50_000, 365, 1, 1824)), ErrorCode.INVALID_POLICY);
     }
 
-    private void assertErrorCode(Runnable runnable, ErrorCode expected) {
-        assertThatThrownBy(runnable::run)
-                .isInstanceOf(PointException.class)
-                .extracting(e -> ((PointException) e).getErrorCode())
-                .isEqualTo(expected);
-    }
 }

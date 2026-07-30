@@ -20,7 +20,6 @@ import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,12 +45,9 @@ public class PointUseService {
     public UseResult use(UseCommand command) {
         userPointLocker.lock(command.userId());
 
-        Optional<PointTransaction> alreadyUsed =
-                idempotencyGuard.findHandled(command.userId(), command.requestKey(), PointTransactionType.USE);
-        if (alreadyUsed.isPresent()) {
-            return toUseResult(alreadyUsed.get());
-        }
-        return deductPoints(command);
+        return idempotencyGuard.runOnce(command.userId(), command.requestKey(), PointTransactionType.USE,
+                this::toUseResult,
+                () -> deductPoints(command));
     }
 
     @Transactional
@@ -59,12 +55,9 @@ public class PointUseService {
         PointTransaction useTransaction = transactionReader.useByPointKey(command.usePointKey());
         userPointLocker.lock(useTransaction.getUserId());
 
-        Optional<PointTransaction> alreadyCanceled = idempotencyGuard.findHandled(
-                useTransaction.getUserId(), command.requestKey(), PointTransactionType.USE_CANCEL);
-        if (alreadyCanceled.isPresent()) {
-            return toUseCancelResult(alreadyCanceled.get());
-        }
-        return restoreUsedPoints(useTransaction, command);
+        return idempotencyGuard.runOnce(useTransaction.getUserId(), command.requestKey(), PointTransactionType.USE_CANCEL,
+                this::toUseCancelResult,
+                () -> restoreUsedPoints(useTransaction, command));
     }
 
     private UseResult deductPoints(UseCommand command) {

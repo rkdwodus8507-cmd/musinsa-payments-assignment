@@ -12,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -31,9 +33,7 @@ class PointApiTest extends IntegrationTestSupport {
     @Test
     @DisplayName("적립 → 사용 → 사용취소 흐름이 API로 동작한다")
     void earnUseCancelFlow() throws Exception {
-        String earnResponse = mockMvc.perform(post("/api/v1/points/earn")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new EarnRequest(USER_ID, 1000, null, "이벤트 적립", null))))
+        String earnResponse = postEarn(new EarnRequest(USER_ID, 1000, null, "이벤트 적립", null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.amount").value(1000))
                 .andExpect(jsonPath("$.manual").value(false))
@@ -44,9 +44,7 @@ class PointApiTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.balance").value(1000));
 
-        String useResponse = mockMvc.perform(post("/api/v1/points/use")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new UseRequest(USER_ID, "A1234", 600, null))))
+        String useResponse = postUse(new UseRequest(USER_ID, "A1234", 600, null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.balance").value(400))
                 .andExpect(jsonPath("$.details[0].earnPointKey").value(earnPointKey))
@@ -72,21 +70,15 @@ class PointApiTest extends IntegrationTestSupport {
     @Test
     @DisplayName("관리자 수기지급 포인트가 우선 사용된다")
     void manualEarnIsUsedFirst() throws Exception {
-        mockMvc.perform(post("/api/v1/points/earn")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new EarnRequest(USER_ID, 1000, 10, null, null))))
+        postEarn(new EarnRequest(USER_ID, 1000, 10, null, null))
                 .andExpect(status().isOk());
 
-        String manualResponse = mockMvc.perform(post("/api/v1/admin/points/earn")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new EarnRequest(USER_ID, 500, 300, "보상 지급", null))))
+        String manualResponse = postAdminEarn(new EarnRequest(USER_ID, 500, 300, "보상 지급", null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.manual").value(true))
                 .andReturn().getResponse().getContentAsString();
 
-        mockMvc.perform(post("/api/v1/points/use")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new UseRequest(USER_ID, "A1234", 500, null))))
+        postUse(new UseRequest(USER_ID, "A1234", 500, null))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.details.length()").value(1))
                 .andExpect(jsonPath("$.details[0].earnPointKey").value(readPointKey(manualResponse)))
@@ -96,9 +88,7 @@ class PointApiTest extends IntegrationTestSupport {
     @Test
     @DisplayName("정책 변경 API로 1회 최대 적립금액을 조정할 수 있다")
     void updatePolicyThroughApi() throws Exception {
-        mockMvc.perform(post("/api/v1/points/earn")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new EarnRequest(USER_ID, 200_000, null, null, null))))
+        postEarn(new EarnRequest(USER_ID, 200_000, null, null, null))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_EARN_AMOUNT"));
 
@@ -109,18 +99,14 @@ class PointApiTest extends IntegrationTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.maxEarnAmount").value(200_000));
 
-        mockMvc.perform(post("/api/v1/points/earn")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new EarnRequest(USER_ID, 200_000, null, null, null))))
+        postEarn(new EarnRequest(USER_ID, 200_000, null, null, null))
                 .andExpect(status().isOk());
     }
 
     @Test
     @DisplayName("잘못된 요청은 400과 에러코드를 반환한다")
     void invalidRequestReturnsBadRequest() throws Exception {
-        mockMvc.perform(post("/api/v1/points/use")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json(new UseRequest(USER_ID, "", 0, null))))
+        postUse(new UseRequest(USER_ID, "", 0, null))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
 
@@ -147,6 +133,24 @@ class PointApiTest extends IntegrationTestSupport {
                         .content("{\"userId\": "))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    private ResultActions postEarn(EarnRequest request) throws Exception {
+        return postJson("/api/v1/points/earn", request);
+    }
+
+    private ResultActions postAdminEarn(EarnRequest request) throws Exception {
+        return postJson("/api/v1/admin/points/earn", request);
+    }
+
+    private ResultActions postUse(UseRequest request) throws Exception {
+        return postJson("/api/v1/points/use", request);
+    }
+
+    private ResultActions postJson(String path, Object body) throws Exception {
+        return mockMvc.perform(MockMvcRequestBuilders.post(path)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(body)));
     }
 
     private String json(Object value) throws Exception {
