@@ -57,7 +57,15 @@ public class PointQueryService {
     public OrderUsageResult getOrderUsage(String orderId) {
         List<PointUsage> usages = usageRepository.findByOrderIdOrderByIdAsc(orderId);
 
-        List<OrderUsageDetail> details = usages.stream()
+        return new OrderUsageResult(
+                orderId,
+                usages.stream().mapToLong(PointUsage::getAmount).sum(),
+                usages.stream().mapToLong(PointUsage::getCanceledAmount).sum(),
+                toOrderUsageDetails(usages));
+    }
+
+    private List<OrderUsageDetail> toOrderUsageDetails(List<PointUsage> usages) {
+        return usages.stream()
                 .map(usage -> new OrderUsageDetail(
                         usage.getUsePointKey(),
                         usage.getEarnedPointKey(),
@@ -66,12 +74,6 @@ public class PointQueryService {
                         usage.isEarnedPointManual(),
                         usage.getEarnedPointExpireAt()))
                 .toList();
-
-        return new OrderUsageResult(
-                orderId,
-                usages.stream().mapToLong(PointUsage::getAmount).sum(),
-                usages.stream().mapToLong(PointUsage::getCanceledAmount).sum(),
-                details);
     }
 
     private long sumRemaining(List<EarnedPoint> earnedPoints) {

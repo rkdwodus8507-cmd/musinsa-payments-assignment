@@ -205,6 +205,35 @@ public UseResult use(UseCommand command) {
 }
 ```
 
+공개 메서드만 그런 게 아니라, 조율하는 private 메서드도 같은 수준의 단계만 담습니다. 인라인 stream 합산이나 `throw` 가 이름 붙은 단계 옆에 섞여 있으면 읽는 사람이 두 수준을 왕복해야 합니다.
+
+```java
+private UseResult deductPoints(UseCommand command) {
+    LocalDateTime now = LocalDateTime.now(clock);
+    List<EarnedPoint> sources = earnedPointReader.usableInPriorityOrder(command.getUserId());
+    validateEnoughToUse(sources, command.getAmount());
+
+    PointTransaction useTransaction = transactionRepository.save(PointTransaction.use(...));
+    deductInPriorityOrder(sources, useTransaction, now);
+
+    return toUseResult(useTransaction);
+}
+```
+
+정리한 결과입니다.
+
+| 메서드 | 본문 | 저수준 표현 |
+|---|---|---|
+| `deductPoints` | 11 → 7줄 | 3 → 0 |
+| `restoreUsedPoints` | 11 → 7줄 | 2 → 0 |
+| `toUseResult` | 14 → 7줄 | 1 → 0 |
+| `toUseCancelResult` | 19 → 10줄 | 1 → 0 |
+| `getOrderUsage` | 15 → 6줄 | 3 → 2 |
+
+`validateEnoughToUse`, `validateCancelable`, `toUsedDetails`, `toCanceledDetails`, `toOrderUsageDetails` 가 새로 생긴 단계들입니다. 검증 규칙에 이름이 붙어서 "쓸 수 있는지 확인한다", "취소할 수 있는지 확인한다"로 읽힙니다.
+
+`deductInPriorityOrder` / `restoreInUsedOrder` 는 `Math.min` 과 루프가 남아 있지만 그게 알고리즘 본체이므로 그대로 뒀습니다. `getOrderUsage` 도 합산 두 줄이 남았는데, 빼내려면 1줄짜리 메서드 두 개가 생겨서 두지 않았습니다.
+
 세부 단계 이름은 도메인 언어를 그대로 씁니다 — `grantPoints`, `takeBackPoints`, `deductInPriorityOrder`, `restoreInUsedOrder`, `giveBack`, `reissue`. 메서드 이름만 훑어도 "적립분을 우선순위 순으로 차감한다", "사용된 순서대로 되돌려준다"가 읽힙니다.
 
 조회 헬퍼는 `EarnedPointReader` / `PointTransactionReader` 두 곳에 모았습니다. 두 서비스에 같은 `findTransaction` 이 중복돼 있던 것을 없애고, 서비스에는 흐름만 남겼습니다.

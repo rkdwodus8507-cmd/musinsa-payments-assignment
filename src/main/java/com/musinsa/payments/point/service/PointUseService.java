@@ -64,12 +64,7 @@ public class PointUseService {
     private UseResult deductPoints(UseCommand command) {
         LocalDateTime now = LocalDateTime.now(clock);
         List<EarnedPoint> sources = earnedPointReader.usableInPriorityOrder(command.getUserId());
-
-        long usable = sources.stream().mapToLong(EarnedPoint::getRemainingAmount).sum();
-        if (usable < command.getAmount()) {
-            throw PointException.of(ErrorCode.INSUFFICIENT_BALANCE,
-                    "사용 가능: %d, 요청: %d".formatted(usable, command.getAmount()));
-        }
+        validateEnoughToUse(sources, command.getAmount());
 
         PointTransaction useTransaction = transactionRepository.save(PointTransaction.use(
                 command.getUserId(), command.getAmount(), command.getOrderId(), command.getRequestKey(), now));
@@ -94,12 +89,7 @@ public class PointUseService {
     private UseCancelResult restoreUsedPoints(PointTransaction useTransaction, CancelUseCommand command) {
         LocalDateTime now = LocalDateTime.now(clock);
         List<PointUsage> usages = usagesOf(useTransaction);
-
-        long cancelable = totalCancelableOf(usages);
-        if (command.getAmount() > cancelable) {
-            throw PointException.of(ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED,
-                    "취소 가능: %d, 요청: %d".formatted(cancelable, command.getAmount()));
-        }
+        validateCancelable(usages, command.getAmount());
 
         PointTransaction cancelTransaction = transactionRepository.save(PointTransaction.useCancel(
                 useTransaction, command.getAmount(), command.getRequestKey(), now));
@@ -153,34 +143,17 @@ public class PointUseService {
     }
 
     private UseResult toUseResult(PointTransaction useTransaction) {
-        List<UsedPointDetail> details = usagesOf(useTransaction).stream()
-                .map(usage -> new UsedPointDetail(
-                        usage.getEarnedPointKey(),
-                        usage.getAmount(),
-                        usage.isEarnedPointManual(),
-                        usage.getEarnedPointExpireAt()))
-                .toList();
-
         return new UseResult(
                 useTransaction.getPointKey(),
                 useTransaction.getUserId(),
                 useTransaction.getOrderId(),
                 useTransaction.getAmount(),
                 earnedPointReader.balanceOf(useTransaction.getUserId()),
-                details);
+                toUsedDetails(usagesOf(useTransaction)));
     }
 
     private UseCancelResult toUseCancelResult(PointTransaction cancelTransaction) {
         PointTransaction useTransaction = transactionReader.byId(cancelTransaction.getRelatedTransactionId());
-        List<CanceledPointDetail> details =
-                cancellationRepository.findByCancelTransactionIdOrderByIdAsc(cancelTransaction.getId()).stream()
-                        .map(cancellation -> new CanceledPointDetail(
-                                cancellation.getSourcePointKey(),
-                                cancellation.getAmount(),
-                                cancellation.isReissued(),
-                                cancellation.getReissuedPointKey(),
-                                cancellation.getExpireAt()))
-                        .toList();
 
         return new UseCancelResult(
                 cancelTransaction.getPointKey(),
@@ -190,7 +163,44 @@ public class PointUseService {
                 cancelTransaction.getAmount(),
                 totalCancelableOf(usagesOf(useTransaction)),
                 earnedPointReader.balanceOf(cancelTransaction.getUserId()),
-                details);
+                toCanceledDetails(cancelTransaction));
+    }
+
+    private void validateEnoughToUse(List<EarnedPoint> sources, long amount) {
+        long usable = sources.stream().mapToLong(EarnedPoint::getRemainingAmount).sum();
+        if (usable < amount) {
+            throw PointException.of(ErrorCode.INSUFFICIENT_BALANCE,
+                    "사용 가능: %d, 요청: %d".formatted(usable, amount));
+        }
+    }
+
+    private void validateCancelable(List<PointUsage> usages, long amount) {
+        long cancelable = totalCancelableOf(usages);
+        if (amount > cancelable) {
+            throw PointException.of(ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED,
+                    "취소 가능: %d, 요청: %d".formatted(cancelable, amount));
+        }
+    }
+
+    private List<UsedPointDetail> toUsedDetails(List<PointUsage> usages) {
+        return usages.stream()
+                .map(usage -> new UsedPointDetail(
+                        usage.getEarnedPointKey(),
+                        usage.getAmount(),
+                        usage.isEarnedPointManual(),
+                        usage.getEarnedPointExpireAt()))
+                .toList();
+    }
+
+    private List<CanceledPointDetail> toCanceledDetails(PointTransaction cancelTransaction) {
+        return cancellationRepository.findByCancelTransactionIdOrderByIdAsc(cancelTransaction.getId()).stream()
+                .map(cancellation -> new CanceledPointDetail(
+                        cancellation.getSourcePointKey(),
+                        cancellation.getAmount(),
+                        cancellation.isReissued(),
+                        cancellation.getReissuedPointKey(),
+                        cancellation.getExpireAt()))
+                .toList();
     }
 
     private List<PointUsage> usagesOf(PointTransaction useTransaction) {
