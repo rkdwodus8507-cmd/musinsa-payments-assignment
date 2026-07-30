@@ -20,21 +20,21 @@ class PointAuditLogTest extends IntegrationTestSupport {
 
     private static final String REQUEST_KEY = "req-audit-1";
 
-    private Logger auditLogger;
+    private Logger auditRecorder;
     private ListAppender<ILoggingEvent> appender;
 
     @BeforeEach
     void attachAppender() {
-        auditLogger = (Logger) LoggerFactory.getLogger("point-audit");
-        auditLogger.setLevel(Level.INFO);
+        auditRecorder = (Logger) LoggerFactory.getLogger("point-audit");
+        auditRecorder.setLevel(Level.INFO);
         appender = new ListAppender<>();
         appender.start();
-        auditLogger.addAppender(appender);
+        auditRecorder.addAppender(appender);
     }
 
     @AfterEach
     void detachAppender() {
-        auditLogger.detachAppender(appender);
+        auditRecorder.detachAppender(appender);
     }
 
     @Test

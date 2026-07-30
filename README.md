@@ -37,6 +37,7 @@
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | OpenAPI 스펙 | http://localhost:8080/v3/api-docs |
 | H2 콘솔 | http://localhost:8080/h2-console (JDBC URL: `jdbc:h2:mem:point`, User: `sa`, 비밀번호 없음) |
+| 헬스 / 지표 | http://localhost:8080/actuator/health , http://localhost:8080/actuator/metrics |
 
 테스트만 실행하려면:
 
@@ -304,6 +305,8 @@ public Clock clock() {
 ```
 
 - 로거 이름이 `point-audit` 이라 운영에서 별도 파일·수집기로 분리할 수 있습니다.
+- 같은 지점에서 지표도 올립니다 — `point.transactions{type}`, `point.amount{type}`, `point.duplicate.requests{type}`, `point.expired.count/amount`. `/actuator/metrics` 로 노출됩니다.
+- 에러 응답에도 `requestId` 를 실어 보냅니다. 고객이 캡처를 보내오면 그 값으로 서버 로그를 바로 찾을 수 있습니다.
 - `[trace-abc]` 는 `X-Request-Id` 입니다. `RequestIdFilter` 가 헤더를 받거나 없으면 발급해 MDC 에 넣고 응답 헤더로 되돌려줍니다. 클라이언트 로그와 서버 로그를 같은 키로 맞출 수 있습니다.
 - 재전송은 `duplicate=true` 로 따로 남고 잔액 변경 기록은 남지 않습니다. 같은 `pointKey` 가 두 줄에 걸쳐 나오므로 "중복 요청이 있었지만 한 번만 반영됐다"가 로그만으로 확인됩니다.
 
@@ -314,7 +317,43 @@ public Clock clock() {
 - 이력 조회 `size` 는 최대 100, `page` 는 0 이상입니다. 상한이 없으면 `?size=1000000` 한 번으로 힙이 갑니다.
 - `IN` 절에 들어가는 id 는 `IdChunks` 가 1000개씩 나눕니다. 적립분이 수천 개 걸린 사용을 취소할 때 IN 절이 폭발하지 않게 합니다.
 
-### 6-12. 멱등성은 락 안에서 판정한다
+### 6-12. 만료 배치도 사용자 락을 잡는다
+
+만료 배치가 락 없이 `earned_point` 를 전이하고 있었습니다. 좁지만 실제로 돈이 새는 경합이 있었습니다.
+
+```
+1. 사용 트랜잭션: 사용자 락 획득 → expire_at > now 로 적립분 A 를 사용 가능으로 읽음
+2. 만료 배치(락 없음): 같은 A 를 expire_at <= now 로 읽어 EXPIRED 로 전이 → 커밋
+3. 사용 트랜잭션: A 에서 차감 → remaining_amount 만 update → 커밋
+   결과: EXPIRED 인데 잔액이 줄어든 적립분 = 만료된 포인트가 사용됨
+```
+
+사용 경로는 이미 사용자 락을 잡으므로, **배치도 같은 락을 잡으면 직렬화됩니다.** 그래서 배치를 사용자 단위로 바꿨습니다.
+
+```java
+List<Long> owners = ownersOfExpirablePoints(baseTime);
+while (!owners.isEmpty()) {
+    for (Long userId : owners) {
+        expiredPointMarker.markFor(userId, baseTime);   // 락 획득 후 전이, 사용자당 독립 트랜잭션
+    }
+    owners = ownersOfExpirablePoints(baseTime);
+}
+```
+
+한 사용자를 처리하면 그 사용자의 만료 대상이 사라지므로 재조회가 비면 끝납니다. 사용자당 트랜잭션이라 중간에 실패해도 앞서 처리한 사용자는 유지되고, 다시 돌리면 이어서 갑니다. 락 점유 시간도 한 사용자 분량으로 짧습니다.
+
+`PointExpirationServiceTest` 가 배치 전에 락 행을 지우고 배치 후 다시 생겼는지 확인해 락 획득을 검증합니다.
+
+### 6-13. 잔액 조회가 전체 적립분을 읽지 않는다
+
+`getBalance` 가 사용자의 적립분을 **전부 메모리로 읽어** 합산하고 있었습니다. 적립분이 수만 건인 사용자의 잔액 조회 한 번이 힙을 태울 수 있습니다.
+
+- 잔액 / 수기지급 잔액 → 집계 쿼리 두 번 (`SUM`)
+- 응답의 적립분 목록 → 최근 100건까지
+
+`PointBalanceQueryTest` 가 적립분 120건을 만들고 읽는 엔티티 수가 200건 이하인지 확인합니다 (전부 읽으면 240건).
+
+### 6-14. 멱등성은 락 안에서 판정한다
 
 네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다. 그래서 재시도한 클라이언트도 같은 `pointKey` 를 받습니다.
 
@@ -343,7 +382,7 @@ public UseResult use(UseCommand command) {
 
 전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
 
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-12](#6-12-멱등성은-락-안에서-판정한다) 참고.
+네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-14](#6-14-멱등성은-락-안에서-판정한다) 참고.
 
 ### 포인트
 
@@ -445,7 +484,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 ./gradlew test
 ```
 
-총 **97개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
+총 **104개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
 
 ### 단위 테스트 (스프링 없음, 40개)
 
@@ -472,6 +511,8 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 | `PointApiTest` | HTTP 계층 (성공 흐름, 검증 실패, 에러 코드) |
 | `PointOperationalTest` | 업무 시간대 고정, 페이지 크기 상한, `X-Request-Id` 왕복 |
 | `PointAuditLogTest` | 잔액이 바뀐 거래만 감사 로그에 남는지 (로그 어펜더로 검증) |
+| `PointExpirationServiceTest` | 만료 배치가 사용자 락을 잡는지, 다중 사용자 처리와 종료 |
+| `PointBalanceQueryTest` | 잔액 조회가 전체 적립분을 읽지 않는지 (Hibernate 통계로 실측) |
 
 **컨텍스트는 1개만 뜹니다.** 통합 테스트 전부가 `IntegrationTestSupport` 를 상속하고 설정이 같아서 스프링 테스트가 컨텍스트를 캐싱합니다. 예전에는 `PointApiTest` 만 `@AutoConfigureMockMvc` 를 따로 붙여 컨텍스트가 2개 떴는데, 공용 베이스로 올려 하나로 합쳤습니다.
 
@@ -564,4 +605,4 @@ src/main/java/com/musinsa/payments/point/
 - **만료 배치가 단일 인스턴스 가정입니다.** 다중 인스턴스에서는 리더 선출이나 분산 락이 필요합니다.
 - **잔액 조회가 매번 합산입니다.** 적립분이 수만 건까지 쌓이면 스냅샷 테이블이 필요합니다 ([6-1](#6-1-잔액을-컬럼으로-저장하지-않는다)).
 - **멱등성 키에 요청 본문 해시를 함께 저장하지 않습니다.** 같은 `requestKey` 에 다른 금액이 오면 최초 결과를 반환합니다. 엄격히는 422 로 거절해야 맞습니다.
-- **메트릭이 없습니다.** 감사 로그는 남기지만 적립/사용 실패율, 락 대기 시간, 배치 지연을 지표로 노출하지 않습니다. Micrometer + Prometheus 가 다음 단계입니다.
+- **지표가 카운터 수준입니다.** 거래 건수·금액·중복 요청·만료는 올리지만, 락 대기 시간과 배치 지연은 아직 타이머/게이지로 노출하지 않습니다.

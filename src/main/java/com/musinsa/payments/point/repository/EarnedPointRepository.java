@@ -16,6 +16,20 @@ public interface EarnedPointRepository extends JpaRepository<EarnedPoint, Long> 
 
     List<EarnedPoint> findByUserIdOrderByIdAsc(Long userId);
 
+    List<EarnedPoint> findByUserIdOrderByIdDesc(Long userId, Pageable pageable);
+
+    @Query("""
+            select coalesce(sum(e.remainingAmount), 0)
+            from EarnedPoint e
+            where e.userId = :userId
+              and e.status = :status
+              and e.expireAt > :now
+              and e.manual = true
+            """)
+    long sumAvailableManualAmount(@Param("userId") Long userId,
+                                  @Param("status") EarnedPointStatus status,
+                                  @Param("now") LocalDateTime now);
+
     @Query("""
             select coalesce(sum(e.remainingAmount), 0)
             from EarnedPoint e
@@ -41,13 +55,25 @@ public interface EarnedPointRepository extends JpaRepository<EarnedPoint, Long> 
                                                 @Param("now") LocalDateTime now);
 
     @Query("""
-            select e
+            select distinct e.userId
             from EarnedPoint e
             where e.status = :status
               and e.expireAt <= :now
+            order by e.userId asc
+            """)
+    List<Long> findOwnersOfExpirablePoints(@Param("status") EarnedPointStatus status,
+                                           @Param("now") LocalDateTime now,
+                                           Pageable pageable);
+
+    @Query("""
+            select e
+            from EarnedPoint e
+            where e.userId = :userId
+              and e.status = :status
+              and e.expireAt <= :now
             order by e.id asc
             """)
-    List<EarnedPoint> findExpirationTargets(@Param("status") EarnedPointStatus status,
-                                            @Param("now") LocalDateTime now,
-                                            Pageable pageable);
+    List<EarnedPoint> findExpirablePointsOf(@Param("userId") Long userId,
+                                            @Param("status") EarnedPointStatus status,
+                                            @Param("now") LocalDateTime now);
 }

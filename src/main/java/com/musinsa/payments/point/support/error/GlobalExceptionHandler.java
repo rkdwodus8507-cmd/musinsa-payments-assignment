@@ -1,5 +1,6 @@
 package com.musinsa.payments.point.support.error;
 
+import com.musinsa.payments.point.support.web.RequestIdFilter;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.slf4j.MDC;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
@@ -27,7 +29,7 @@ public class GlobalExceptionHandler {
             log.warn("point error: {}", e.getMessage());
         }
         return ResponseEntity.status(errorCode.getStatus())
-                .body(ErrorResponse.of(errorCode, e.getMessage()));
+                .body(errorResponse(errorCode.name(), e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -36,7 +38,7 @@ public class GlobalExceptionHandler {
                 .map(this::describe)
                 .collect(Collectors.joining(", "));
         return ResponseEntity.badRequest()
-                .body(new ErrorResponse("INVALID_REQUEST", message));
+                .body(errorResponse("INVALID_REQUEST", message));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -45,13 +47,13 @@ public class GlobalExceptionHandler {
                 .map(violation -> lastPathNode(violation) + ": " + violation.getMessage())
                 .collect(Collectors.joining(", "));
         return ResponseEntity.badRequest()
-                .body(new ErrorResponse("INVALID_REQUEST", message));
+                .body(errorResponse("INVALID_REQUEST", message));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException e) {
         return ResponseEntity.badRequest()
-                .body(new ErrorResponse("INVALID_REQUEST", "요청 본문을 읽을 수 없습니다."));
+                .body(errorResponse("INVALID_REQUEST", "요청 본문을 읽을 수 없습니다."));
     }
 
     @ExceptionHandler(Exception.class)
@@ -60,11 +62,15 @@ public class GlobalExceptionHandler {
             HttpStatusCode status = springError.getStatusCode();
             log.warn("web error: {} {}", status, e.getMessage());
             return ResponseEntity.status(status)
-                    .body(new ErrorResponse(HttpStatus.valueOf(status.value()).name(), e.getMessage()));
+                    .body(errorResponse(HttpStatus.valueOf(status.value()).name(), e.getMessage()));
         }
         log.error("unexpected error", e);
         return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.getStatus())
-                .body(ErrorResponse.of(ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.getMessage()));
+                .body(errorResponse(ErrorCode.INTERNAL_ERROR.name(), ErrorCode.INTERNAL_ERROR.getMessage()));
+    }
+
+    private ErrorResponse errorResponse(String code, String message) {
+        return new ErrorResponse(code, message, MDC.get(RequestIdFilter.MDC_KEY));
     }
 
     private String lastPathNode(ConstraintViolation<?> violation) {

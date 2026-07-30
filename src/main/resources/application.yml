@@ -37,6 +37,12 @@ point:
     cron: "0 0 4 * * *"
     chunk-size: 500
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
