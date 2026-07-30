@@ -4,21 +4,14 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-@ConfigurationProperties(prefix = "point.expiration")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class PointExpirationProperties {
+@ConfigurationProperties(prefix = "point.admin")
+public class AdminSecurityProperties {
 
-    private boolean enabled;
-
-    private String cron;
-
-    private int chunkSize;
-
-    private Duration lockTtl;
+    private String apiKey;
 }

@@ -3,20 +3,26 @@ package com.musinsa.payments.point.service;
 import com.musinsa.payments.point.domain.PointTransaction;
 import com.musinsa.payments.point.domain.PointTransactionType;
 import com.musinsa.payments.point.service.dto.ExpirationResult;
-import java.time.LocalDateTime;
 import io.micrometer.core.instrument.MeterRegistry;
-import lombok.RequiredArgsConstructor;
+import java.time.LocalDateTime;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class PointAuditRecorder {
 
     private static final Logger audit = LoggerFactory.getLogger("point-audit");
 
     private final MeterRegistry meterRegistry;
+    private final AtomicLong expirationBacklog = new AtomicLong();
+
+    public PointAuditRecorder(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+        meterRegistry.gauge("point.expiration.backlog", expirationBacklog);
+    }
 
     public void recordMutation(PointTransaction transaction, long balanceAfter) {
         audit.info("type={} pointKey={} userId={} amount={} orderId={} requestKey={} relatedTransactionId={} balanceAfter={}",
@@ -42,13 +48,19 @@ public class PointAuditRecorder {
         count("point.duplicate.requests", alreadyHandled.getType());
     }
 
-    public void recordExpiration(ExpirationResult expired, LocalDateTime baseTime) {
+    public void recordExpiration(ExpirationResult expired, LocalDateTime baseTime, long elapsedNanos) {
         if (expired.getExpiredCount() > 0) {
             audit.info("type=EXPIRE count={} amount={} baseTime={}",
                     expired.getExpiredCount(), expired.getExpiredAmount(), baseTime);
         }
         meterRegistry.counter("point.expired.count").increment(expired.getExpiredCount());
         meterRegistry.counter("point.expired.amount").increment(expired.getExpiredAmount());
+        meterRegistry.timer("point.expiration.duration").record(elapsedNanos, TimeUnit.NANOSECONDS);
+        expirationBacklog.addAndGet(-expired.getExpiredCount());
+    }
+
+    public void recordExpirationBacklog(long expirablePoints) {
+        expirationBacklog.set(expirablePoints);
     }
 
     private void count(String name, PointTransactionType type) {

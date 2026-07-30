@@ -11,7 +11,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("잔액 조회 - 적립분이 많아도 전체를 읽지 않는다")
 class PointBalanceQueryTest extends IntegrationTestSupport {
 
-
     @Test
     @DisplayName("적립분이 상한보다 많아도 응답 목록은 상한까지만 담긴다")
     void earnedPointListIsCapped() {

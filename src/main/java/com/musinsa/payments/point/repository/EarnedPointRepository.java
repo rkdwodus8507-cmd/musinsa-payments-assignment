@@ -55,6 +55,14 @@ public interface EarnedPointRepository extends JpaRepository<EarnedPoint, Long> 
                                                 @Param("now") LocalDateTime now);
 
     @Query("""
+            select count(e)
+            from EarnedPoint e
+            where e.status = :status
+              and e.expireAt <= :now
+            """)
+    long countExpirablePoints(@Param("status") EarnedPointStatus status, @Param("now") LocalDateTime now);
+
+    @Query("""
             select distinct e.userId
             from EarnedPoint e
             where e.status = :status

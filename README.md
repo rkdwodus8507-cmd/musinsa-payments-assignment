@@ -366,7 +366,74 @@ while (!owners.isEmpty()) {
 
 `./gradlew bootRun` 은 `local` 을 자동으로 켜므로 훑어보는 사람은 신경 쓸 게 없고, 패키징한 jar 는 기본값으로 떠서 안전한 쪽이 기본이 됩니다.
 
-### 6-15. 멱등성은 락 안에서 판정한다
+### 6-15. DB 문법 차이를 한 클래스에 가둔다
+
+사용자 락 행을 만드는 upsert 는 DB 마다 문법이 갈립니다. 이 한 줄이 리포지토리에 박혀 있으면 이관할 때 어디를 고쳐야 하는지가 코드에 드러나지 않습니다. 그래서 인터페이스 하나로 가뒀습니다.
+
+| 구현 | SQL |
+|---|---|
+| `H2UserPointLockRegistrar` (기본) | `merge into user_point_lock (...) key (user_id) values (...)` |
+| `MySqlUserPointLockRegistrar` | `insert into user_point_lock (...) values (...) on duplicate key update user_id = user_id` |
+
+`point.database.dialect` 로 고릅니다. `UserPointLockRegistrarTest` 가 기본값에서 H2 구현이 선택되는지, 같은 사용자로 여러 번 호출해도 행이 하나인지 확인합니다.
+
+**MySQL 구현은 실행 검증을 못 했습니다.** 이 환경에 Docker 가 없어 Testcontainers 를 띄울 수 없었습니다. 문법을 적어두고 갈아끼울 자리를 만든 것까지입니다.
+
+### 6-16. 스키마는 Flyway 로 관리한다
+
+`schema.sql` 을 `db/migration/V1__init_point_schema.sql` 로 옮겼습니다. 운영 중인 포인트 테이블을 바꾸는 절차는 이렇습니다.
+
+1. 새 마이그레이션 파일을 추가합니다 (`V2__add_xxx.sql`). **기존 파일은 절대 수정하지 않습니다** — 이미 적용된 환경과 체크섬이 어긋납니다.
+2. 컬럼 추가는 두 단계로 나눕니다. `V2` 에서 nullable 로 추가 → 애플리케이션 배포로 채우기 → `V3` 에서 `not null` 로 조입니다. 한 번에 하면 배포 중 구버전이 그 컬럼을 모르는 순간에 insert 가 실패합니다.
+3. 롤백 마이그레이션은 두지 않습니다. 되돌릴 일이 생기면 되돌리는 마이그레이션을 새로 씁니다.
+
+MySQL 로 옮기면 `flyway-mysql` 모듈이 추가로 필요합니다.
+
+### 6-17. 배치는 인스턴스 하나만 돈다
+
+만료 배치가 여러 인스턴스에서 동시에 돌면 같은 적립분을 두 번 처리하려다 락 경합만 늘고, 배포 중에는 구·신버전이 겹쳐 돕니다. DB 행 하나로 선점합니다.
+
+```sql
+update batch_lock
+set holder = :holder, acquired_at = :now, expires_at = :expiresAt
+where name = :name and expires_at <= :now
+```
+
+갱신된 행이 1이면 획득입니다. 조건부 UPDATE 한 문장이라 원자적이고, 특정 DB 문법도 아닙니다.
+
+- **TTL(기본 10분)** 이 있어 인스턴스가 죽어도 다음 실행이 회수합니다. 이게 없으면 만료가 영원히 멈춥니다.
+- 정상 종료 시에는 즉시 반납합니다.
+- 락 획득/반납은 `REQUIRES_NEW` 로 배치 트랜잭션과 분리했습니다. 배치가 길어져도 락 행을 붙잡고 있지 않습니다.
+
+`PointBatchLockTest` 가 세 가지를 확인합니다 — 다른 인스턴스가 잡고 있으면 건너뛰는지, 끝나면 반납하는지, TTL 이 지난 락을 회수하는지.
+
+### 6-18. 장애를 미리 보는 지표
+
+카운터만으로는 사고가 난 뒤에야 압니다. 시간과 적체를 봅니다.
+
+| 지표 | 종류 | 보는 것 |
+|---|---|---|
+| `point.lock.wait` | Timer | 사용자 락 대기 시간. 늘어나면 특정 사용자에 요청이 몰리거나 트랜잭션이 길어진 것 |
+| `point.expiration.duration` | Timer | 배치 소요 시간 |
+| `point.expiration.backlog` | Gauge | **만료 시각이 지났는데 아직 처리 안 된 적립분 수.** 0 이 아닌 채로 유지되면 배치가 밀리고 있다는 뜻 |
+
+backlog 는 배치 시작 시점에 세고 처리한 만큼 깎습니다. 스크레이프마다 DB 를 치지 않습니다.
+
+### 6-19. 관리자 API 는 열어두지 않는다
+
+수기지급과 정책 변경은 잔액을 직접 바꿉니다. `/api/v1/admin/**` 은 `X-Admin-Api-Key` 없이는 401 입니다.
+
+```json
+{"code":"UNAUTHORIZED","message":"관리자 API 인증에 실패했습니다.","requestId":"admin-try-1"}
+```
+
+- 키 비교는 `MessageDigest.isEqual` 로 합니다. `equals` 는 앞에서부터 비교해 시간 차이가 나므로 타이밍 공격에 노출됩니다.
+- 실패는 `WARN` 으로 남고 `requestId` 가 붙어 시도를 추적할 수 있습니다.
+- 필터 순서를 고정했습니다 — 요청 추적(`RequestIdFilter`)이 먼저 돌아야 401 응답에도 `requestId` 가 실립니다.
+
+**이건 최소한의 방어입니다.** 실제로는 게이트웨이/mTLS/IAM 으로 막고, 조작자가 누구인지까지 감사 로그에 남겨야 합니다. 사용자 API 도 `userId` 를 요청 본문으로 받고 있는데, 실서비스라면 토큰에서 꺼내야 합니다 — 지금은 인증 주체가 없어 그대로 뒀습니다.
+
+### 6-20. 멱등성은 락 안에서 판정한다
 
 네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다. 그래서 재시도한 클라이언트도 같은 `pointKey` 를 받습니다.
 
@@ -395,7 +462,7 @@ public UseResult use(UseCommand command) {
 
 전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
 
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-15](#6-15-멱등성은-락-안에서-판정한다) 참고.
+네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-20](#6-20-멱등성은-락-안에서-판정한다) 참고.
 
 ### 포인트
 
@@ -497,7 +564,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 ./gradlew test
 ```
 
-총 **104개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
+총 **114개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
 
 ### 단위 테스트 (스프링 없음, 40개)
 
@@ -526,6 +593,9 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 | `PointAuditLogTest` | 잔액이 바뀐 거래만 감사 로그에 남는지 (로그 어펜더로 검증) |
 | `PointExpirationServiceTest` | 만료 배치가 사용자 락을 잡는지, 다중 사용자 처리와 종료 |
 | `PointBalanceQueryTest` | 잔액 조회가 전체 적립분을 읽지 않는지 (Hibernate 통계로 실측) |
+| `PointBatchLockTest` | 배치 단일 실행 보장 — 선점 / 반납 / TTL 회수 |
+| `AdminApiKeyTest` | 관리자 API 인증, 사용자 API 는 영향 없음 |
+| `UserPointLockRegistrarTest` | dialect 구현 선택, upsert 멱등성 |
 
 **컨텍스트는 1개만 뜹니다.** 통합 테스트 전부가 `IntegrationTestSupport` 를 상속하고 설정이 같아서 스프링 테스트가 컨텍스트를 캐싱합니다. 예전에는 `PointApiTest` 만 `@AutoConfigureMockMvc` 를 따로 붙여 컨텍스트가 2개 떴는데, 공용 베이스로 올려 하나로 합쳤습니다.
 
@@ -612,10 +682,9 @@ src/main/java/com/musinsa/payments/point/
 
 ## 11. 한계와 개선 방향
 
-- **H2 전용 문법과 락 동작 차이.** `MERGE ... KEY` 는 MySQL 에서 `INSERT ... ON DUPLICATE KEY UPDATE` 로 바꿔야 합니다. 더 중요한 건 H2 의 `SELECT ... FOR UPDATE` 와 MySQL 의 갭 락 동작이 달라, **지금 통과하는 동시성 테스트가 MySQL 에서 같은 결과를 보장하지 않습니다.** 실제 이관 시 MySQL 로 같은 테스트를 다시 돌려야 합니다.
-- **인증·인가가 없습니다.** `userId` 를 요청으로 받고, 관리자 API 도 열려 있습니다. 실서비스라면 관리자 API 는 내부망 + 별도 인증 + 조작자 식별이 필요합니다.
+- **MySQL 에서 실행 검증을 못 했습니다.** upsert 문법 차이는 [6-15](#6-15-db-문법-차이를-한-클래스에-가둔다) 로 가뒀지만 MySQL 구현을 돌려보지는 못했습니다(Docker 부재). 더 중요한 건 H2 의 `SELECT ... FOR UPDATE` 와 MySQL 의 갭 락 동작이 달라 **지금 통과하는 동시성 테스트가 MySQL 에서 같은 결과를 보장하지 않는다**는 점입니다. 이관 시 MySQL Testcontainer 로 같은 테스트를 다시 돌려야 합니다.
+- **인증이 API 키 한 겹입니다.** 관리자 API 는 막았지만 조작자가 누구인지는 남지 않고, 사용자 API 는 `userId` 를 요청으로 받습니다. 실서비스라면 게이트웨이/mTLS/IAM 과 토큰 기반 사용자 식별이 필요합니다.
 - **데이터 수명 정책이 없습니다.** `point_transaction` / `point_usage` 는 무한히 쌓입니다. 오래된 이력은 S3 + Athena 로 아카이빙하고 원장만 남기는 편이 맞습니다.
-- **만료 배치가 단일 인스턴스 가정입니다.** 다중 인스턴스에서는 리더 선출이나 분산 락이 필요합니다.
 - **잔액 조회가 매번 합산입니다.** 적립분이 수만 건까지 쌓이면 스냅샷 테이블이 필요합니다 ([6-1](#6-1-잔액을-컬럼으로-저장하지-않는다)).
 - **멱등성 키에 요청 본문 해시를 함께 저장하지 않습니다.** 같은 `requestKey` 에 다른 금액이 오면 최초 결과를 반환합니다. 엄격히는 422 로 거절해야 맞습니다.
-- **지표가 카운터 수준입니다.** 거래 건수·금액·중복 요청·만료는 올리지만, 락 대기 시간과 배치 지연은 아직 타이머/게이지로 노출하지 않습니다.
+- **지표를 내보낼 곳이 없습니다.** `/actuator/metrics` 로 노출만 하고 Prometheus 등으로 수집·경보하는 설정은 없습니다.

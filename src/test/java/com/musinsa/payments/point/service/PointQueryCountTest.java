@@ -15,7 +15,6 @@ class PointQueryCountTest extends IntegrationTestSupport {
     private static final int FEW = 2;
     private static final int MANY = 6;
 
-
     @Test
     @DisplayName("사용은 적립분당 쓰기 2건(사용상세 insert + 적립분 update)만 늘어난다")
     void useCostsTwoWritesPerSource() {

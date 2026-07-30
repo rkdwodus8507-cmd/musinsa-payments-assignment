@@ -6,6 +6,7 @@ import com.musinsa.payments.point.api.dto.EarnRequest;
 import com.musinsa.payments.point.api.dto.UpdatePolicyRequest;
 import com.musinsa.payments.point.api.dto.UseRequest;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
+import com.musinsa.payments.point.support.security.AdminApiKeyFilter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +22,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @DisplayName("포인트 API")
 class PointApiTest extends IntegrationTestSupport {
+
+    private static final String ADMIN_API_KEY = "local-admin-key";
 
     @Autowired
     private MockMvc mockMvc;
@@ -92,6 +95,7 @@ class PointApiTest extends IntegrationTestSupport {
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .put("/api/v1/admin/points/policies")
+                        .header(AdminApiKeyFilter.HEADER, ADMIN_API_KEY)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(new UpdatePolicyRequest(1, 200_000, 1_000_000, 365, 1, 1824))))
                 .andExpect(status().isOk())
@@ -138,7 +142,10 @@ class PointApiTest extends IntegrationTestSupport {
     }
 
     private ResultActions postAdminEarn(EarnRequest request) throws Exception {
-        return postJson("/api/v1/admin/points/earn", request);
+        return mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/admin/points/earn")
+                .header(AdminApiKeyFilter.HEADER, ADMIN_API_KEY)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json(request)));
     }
 
     private ResultActions postUse(UseRequest request) throws Exception {
