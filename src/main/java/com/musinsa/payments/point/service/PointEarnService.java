@@ -29,7 +29,7 @@ public class PointEarnService {
     private final UserPointLocker userPointLocker;
     private final PointTransactionReader transactionReader;
     private final PointIdempotencyGuard idempotencyGuard;
-    private final PointAuditLogger auditLogger;
+    private final PointAuditRecorder auditRecorder;
     private final Clock clock;
 
     @Transactional
@@ -78,12 +78,12 @@ public class PointEarnService {
     }
 
     private EarnResult audited(PointTransaction transaction, EarnResult result) {
-        auditLogger.recordMutation(transaction, result.getBalance());
+        auditRecorder.recordMutation(transaction, result.getBalance());
         return result;
     }
 
     private EarnCancelResult audited(PointTransaction transaction, EarnCancelResult result) {
-        auditLogger.recordMutation(transaction, result.getBalance());
+        auditRecorder.recordMutation(transaction, result.getBalance());
         return result;
     }
 

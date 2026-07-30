@@ -7,7 +7,6 @@ import com.musinsa.payments.point.service.dto.ExpirationResult;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,11 +15,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class ExpiredPointMarker {
 
     private final EarnedPointRepository earnedPointRepository;
+    private final UserPointLocker userPointLocker;
 
     @Transactional
-    public ExpirationResult markChunk(LocalDateTime baseTime, int chunkSize) {
-        List<EarnedPoint> targets = earnedPointRepository.findExpirationTargets(
-                EarnedPointStatus.AVAILABLE, baseTime, PageRequest.of(0, chunkSize));
+    public ExpirationResult markFor(Long userId, LocalDateTime baseTime) {
+        userPointLocker.lock(userId);
+
+        List<EarnedPoint> targets = earnedPointRepository.findExpirablePointsOf(
+                userId, EarnedPointStatus.AVAILABLE, baseTime);
 
         long expiredAmount = 0;
         for (EarnedPoint earnedPoint : targets) {

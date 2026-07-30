@@ -25,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class PointQueryService {
 
+    private static final int MAX_EARNED_POINTS_IN_BALANCE = 100;
+
     private final PointTransactionRepository transactionRepository;
     private final PointTransactionReader transactionReader;
     private final PointUsageRepository usageRepository;
@@ -33,16 +35,12 @@ public class PointQueryService {
 
     public BalanceResult getBalance(Long userId) {
         LocalDateTime now = LocalDateTime.now(clock);
-        List<EarnedPoint> earnedPoints = earnedPointReader.allOf(userId);
 
-        List<EarnedPoint> usable = earnedPoints.stream()
-                .filter(earnedPoint -> earnedPoint.canBeUsedAt(now))
-                .toList();
-        List<EarnedPoint> usableManual = usable.stream()
-                .filter(EarnedPoint::isManual)
-                .toList();
-
-        return new BalanceResult(userId, sumRemaining(usable), sumRemaining(usableManual), toSummaries(earnedPoints, now));
+        return new BalanceResult(
+                userId,
+                earnedPointReader.balanceOf(userId),
+                earnedPointReader.manualBalanceOf(userId),
+                toSummaries(earnedPointReader.recentOf(userId, MAX_EARNED_POINTS_IN_BALANCE), now));
     }
 
     public Page<TransactionResult> getTransactions(Long userId, Pageable pageable) {
@@ -93,10 +91,6 @@ public class PointQueryService {
                             source.getExpireAt());
                 })
                 .toList();
-    }
-
-    private long sumRemaining(List<EarnedPoint> earnedPoints) {
-        return earnedPoints.stream().mapToLong(EarnedPoint::getRemainingAmount).sum();
     }
 
     private List<EarnedPointSummary> toSummaries(List<EarnedPoint> earnedPoints, LocalDateTime now) {

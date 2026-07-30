@@ -57,6 +57,4 @@ class PointPolicyServiceTest extends IntegrationTestSupport {
                 .isEqualTo(clock.currentDateTime().plusDays(30));
     }
 
-
-
 }

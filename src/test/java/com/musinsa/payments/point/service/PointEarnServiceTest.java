@@ -28,10 +28,6 @@ class PointEarnServiceTest extends IntegrationTestSupport {
         assertThat(result.isManual()).isFalse();
     }
 
-
-
-
-
     @Test
     @DisplayName("개인별 최대 보유 포인트를 초과하면 적립이 거절된다")
     void earnBeyondMaxUserBalance() {

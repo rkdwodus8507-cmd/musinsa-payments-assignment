@@ -42,7 +42,7 @@ public class PointUseService {
     private final UserPointLocker userPointLocker;
     private final PointTransactionReader transactionReader;
     private final PointIdempotencyGuard idempotencyGuard;
-    private final PointAuditLogger auditLogger;
+    private final PointAuditRecorder auditRecorder;
     private final Clock clock;
 
     @Transactional
@@ -145,12 +145,12 @@ public class PointUseService {
     }
 
     private UseResult audited(PointTransaction transaction, UseResult result) {
-        auditLogger.recordMutation(transaction, result.getBalance());
+        auditRecorder.recordMutation(transaction, result.getBalance());
         return result;
     }
 
     private UseCancelResult audited(PointTransaction transaction, UseCancelResult result) {
-        auditLogger.recordMutation(transaction, result.getBalance());
+        auditRecorder.recordMutation(transaction, result.getBalance());
         return result;
     }
 

@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -31,10 +32,13 @@ public class EarnedPointReader {
         return earnedPointRepository.findUsableInPriorityOrder(userId, EarnedPointStatus.AVAILABLE, now());
     }
 
-    public List<EarnedPoint> allOf(Long userId) {
-        return earnedPointRepository.findByUserIdOrderByIdAsc(userId);
+    public long manualBalanceOf(Long userId) {
+        return earnedPointRepository.sumAvailableManualAmount(userId, EarnedPointStatus.AVAILABLE, now());
     }
 
+    public List<EarnedPoint> recentOf(Long userId, int limit) {
+        return earnedPointRepository.findByUserIdOrderByIdDesc(userId, PageRequest.of(0, limit));
+    }
 
     public Map<Long, EarnedPoint> byIds(Collection<Long> earnedPointIds) {
         Map<Long, EarnedPoint> found = IdChunks.split(earnedPointIds).stream()
