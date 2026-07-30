@@ -2,20 +2,15 @@ package com.musinsa.payments.point.service;
 
 import com.musinsa.payments.point.service.dto.BalanceResult;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
-import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("잔액 조회 - 적립분이 많아도 전체를 읽지 않는다")
 class PointBalanceQueryTest extends IntegrationTestSupport {
 
-    @Autowired
-    private EntityManagerFactory entityManagerFactory;
 
     @Test
     @DisplayName("적립분이 상한보다 많아도 응답 목록은 상한까지만 담긴다")
@@ -39,9 +34,7 @@ class PointBalanceQueryTest extends IntegrationTestSupport {
             earn(10, 365);
         }
 
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        statistics.setStatisticsEnabled(true);
-        statistics.clear();
+        Statistics statistics = startCountingQueries();
 
         BalanceResult balance = queryService.getBalance(USER_ID);
 

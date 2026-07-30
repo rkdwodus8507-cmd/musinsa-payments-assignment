@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import static com.musinsa.payments.point.support.PointAssertions.assertErrorCode;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("사용 상세 - 취소 가능 금액 규칙")
 class PointUsageTest {
@@ -53,10 +53,4 @@ class PointUsageTest {
         return PointUsage.of(useTransaction, source, amount, NOW);
     }
 
-    private void assertErrorCode(Runnable action, ErrorCode expected) {
-        assertThatThrownBy(action::run)
-                .isInstanceOf(PointException.class)
-                .extracting(e -> ((PointException) e).getErrorCode())
-                .isEqualTo(expected);
-    }
 }

@@ -45,8 +45,6 @@ create table point_transaction
 );
 
 create index idx_point_transaction_user_id on point_transaction (user_id, id desc);
-create index idx_point_transaction_order_id on point_transaction (order_id);
-create index idx_point_transaction_related on point_transaction (type, related_transaction_id);
 
 create table earned_point
 (
@@ -95,4 +93,3 @@ create table point_usage_cancellation
 );
 
 create index idx_point_usage_cancellation_transaction on point_usage_cancellation (cancel_transaction_id, id);
-create index idx_point_usage_cancellation_usage on point_usage_cancellation (point_usage_id);

@@ -6,18 +6,11 @@ spring:
     driver-class-name: org.h2.Driver
     username: sa
     password:
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
   jpa:
     hibernate:
       ddl-auto: none
     open-in-view: false
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
+    show-sql: false
   sql:
     init:
       mode: always
@@ -52,5 +45,5 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{requestId:-no-request-id}] %-40.40logger{39} : %m%n"
   level:
-    com.musinsa.payments.point: DEBUG
+    com.musinsa.payments.point: INFO
     point-audit: INFO

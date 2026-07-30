@@ -28,13 +28,14 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.IntFunction;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -45,6 +46,9 @@ public abstract class IntegrationTestSupport {
 
     @Autowired
     protected MutableClock clock;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     @Autowired
     protected PointEarnService earnService;
@@ -111,15 +115,15 @@ public abstract class IntegrationTestSupport {
         return useService.cancelUse(new CancelUseCommand(usePointKey, amount, null));
     }
 
-    protected long balanceOf(long userId) {
-        return queryService.getBalance(userId).getBalance();
+    protected Statistics startCountingQueries() {
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        statistics.clear();
+        return statistics;
     }
 
-    protected void assertErrorCode(Runnable action, ErrorCode expected) {
-        assertThatThrownBy(action::run)
-                .isInstanceOf(PointException.class)
-                .extracting(e -> ((PointException) e).getErrorCode())
-                .isEqualTo(expected);
+    protected long balanceOf(long userId) {
+        return queryService.getBalance(userId).getBalance();
     }
 
     protected <T> ConcurrentRun<T> runConcurrently(int threadCount, IntFunction<T> task) {

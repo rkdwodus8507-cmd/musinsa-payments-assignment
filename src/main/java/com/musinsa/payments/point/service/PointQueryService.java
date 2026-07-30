@@ -73,23 +73,18 @@ public class PointQueryService {
     }
 
     private List<OrderUsageDetail> toOrderUsageDetails(List<PointUsage> usages) {
-        Map<Long, EarnedPoint> sources = earnedPointReader.byIds(
-                usages.stream().map(PointUsage::getEarnedPointId).distinct().toList());
-        Map<Long, String> earnPointKeys = transactionReader.earnPointKeysByEarnedPointId(sources.values());
+        EarnedPointSources sources = earnedPointReader.sourcesOf(usages);
         Map<Long, String> usePointKeys = transactionReader.pointKeysByTransactionId(
                 usages.stream().map(PointUsage::getUseTransactionId).toList());
 
         return usages.stream()
-                .map(usage -> {
-                    EarnedPoint source = sources.get(usage.getEarnedPointId());
-                    return new OrderUsageDetail(
-                            usePointKeys.get(usage.getUseTransactionId()),
-                            earnPointKeys.get(source.getId()),
-                            usage.getAmount(),
-                            usage.getCanceledAmount(),
-                            source.isManual(),
-                            source.getExpireAt());
-                })
+                .map(usage -> new OrderUsageDetail(
+                        usePointKeys.get(usage.getUseTransactionId()),
+                        sources.earnPointKeyOf(usage),
+                        usage.getAmount(),
+                        usage.getCanceledAmount(),
+                        sources.of(usage).isManual(),
+                        sources.of(usage).getExpireAt()))
                 .toList();
     }
 

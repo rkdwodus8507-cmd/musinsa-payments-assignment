@@ -14,6 +14,7 @@ import com.musinsa.payments.point.support.error.PointException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import static com.musinsa.payments.point.support.PointAssertions.assertErrorCode;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisplayName("포인트 적립 / 적립취소")

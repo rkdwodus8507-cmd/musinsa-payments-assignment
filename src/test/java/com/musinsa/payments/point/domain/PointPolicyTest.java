@@ -8,9 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import static com.musinsa.payments.point.support.PointAssertions.assertErrorCode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("포인트 정책 - 금액 / 만료일 / 보유한도 규칙")
 class PointPolicyTest {
@@ -100,10 +100,4 @@ class PointPolicyTest {
         assertErrorCode(() -> PointPolicy.create(values, NOW), ErrorCode.INVALID_POLICY);
     }
 
-    private void assertErrorCode(Runnable action, ErrorCode expected) {
-        assertThatThrownBy(action::run)
-                .isInstanceOf(PointException.class)
-                .extracting(e -> ((PointException) e).getErrorCode())
-                .isEqualTo(expected);
-    }
 }

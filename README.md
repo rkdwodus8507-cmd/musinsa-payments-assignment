@@ -30,13 +30,20 @@
 ./gradlew bootRun
 ```
 
+`bootRun` 은 `local` 프로파일로 뜹니다 — SQL 로그와 H2 콘솔이 켜져 코드를 훑어보기 편합니다. 패키징한 jar 는 기본 프로파일로 떠서 **SQL 로그가 꺼지고 H2 콘솔도 닫힙니다.**
+
+```bash
+java -jar build/libs/free-point-system-1.0.0.jar                          # 조용한 기본 설정
+java -jar build/libs/free-point-system-1.0.0.jar --spring.profiles.active=local   # 개발용
+```
+
 실행 후 접속 경로:
 
 | | URL |
 |---|---|
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | OpenAPI 스펙 | http://localhost:8080/v3/api-docs |
-| H2 콘솔 | http://localhost:8080/h2-console (JDBC URL: `jdbc:h2:mem:point`, User: `sa`, 비밀번호 없음) |
+| H2 콘솔 | http://localhost:8080/h2-console (`local` 프로파일에서만, JDBC URL: `jdbc:h2:mem:point`, User: `sa`, 비밀번호 없음) |
 | 헬스 / 지표 | http://localhost:8080/actuator/health , http://localhost:8080/actuator/metrics |
 
 테스트만 실행하려면:
@@ -353,7 +360,13 @@ while (!owners.isEmpty()) {
 
 `PointBalanceQueryTest` 가 적립분 120건을 만들고 읽는 엔티티 수가 200건 이하인지 확인합니다 (전부 읽으면 240건).
 
-### 6-14. 멱등성은 락 안에서 판정한다
+### 6-14. 개발 편의 설정은 프로파일로 가른다
+
+`show-sql`, `format_sql`, `DEBUG` 로그, H2 콘솔은 리뷰할 때는 편하지만 그대로 운영에 올리면 로그가 폭발하고 콘솔이 열려 있게 됩니다. 기본 프로파일은 조용하게 두고 개발 편의는 `local` 로 뺐습니다.
+
+`./gradlew bootRun` 은 `local` 을 자동으로 켜므로 훑어보는 사람은 신경 쓸 게 없고, 패키징한 jar 는 기본값으로 떠서 안전한 쪽이 기본이 됩니다.
+
+### 6-15. 멱등성은 락 안에서 판정한다
 
 네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다. 그래서 재시도한 클라이언트도 같은 `pointKey` 를 받습니다.
 
@@ -382,7 +395,7 @@ public UseResult use(UseCommand command) {
 
 전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
 
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-14](#6-14-멱등성은-락-안에서-판정한다) 참고.
+네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-15](#6-15-멱등성은-락-안에서-판정한다) 참고.
 
 ### 포인트
 

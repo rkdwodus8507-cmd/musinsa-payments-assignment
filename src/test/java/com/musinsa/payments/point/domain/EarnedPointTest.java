@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import static com.musinsa.payments.point.support.PointAssertions.assertErrorCode;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("적립분 - 차감 / 복원 / 취소 / 만료 규칙")
 class EarnedPointTest {
@@ -141,10 +141,4 @@ class EarnedPointTest {
         return EarnedPoint.from(earnTransaction, manual, expireAt, NOW);
     }
 
-    private void assertErrorCode(Runnable action, ErrorCode expected) {
-        assertThatThrownBy(action::run)
-                .isInstanceOf(PointException.class)
-                .extracting(e -> ((PointException) e).getErrorCode())
-                .isEqualTo(expected);
-    }
 }

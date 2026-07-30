@@ -2,6 +2,8 @@ package com.musinsa.payments.point.service;
 
 import com.musinsa.payments.point.domain.PointTransaction;
 import com.musinsa.payments.point.domain.PointTransactionType;
+import com.musinsa.payments.point.service.dto.ExpirationResult;
+import java.time.LocalDateTime;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -40,9 +42,13 @@ public class PointAuditRecorder {
         count("point.duplicate.requests", alreadyHandled.getType());
     }
 
-    public void recordExpiration(int expiredCount, long expiredAmount) {
-        meterRegistry.counter("point.expired.count").increment(expiredCount);
-        meterRegistry.counter("point.expired.amount").increment(expiredAmount);
+    public void recordExpiration(ExpirationResult expired, LocalDateTime baseTime) {
+        if (expired.getExpiredCount() > 0) {
+            audit.info("type=EXPIRE count={} amount={} baseTime={}",
+                    expired.getExpiredCount(), expired.getExpiredAmount(), baseTime);
+        }
+        meterRegistry.counter("point.expired.count").increment(expired.getExpiredCount());
+        meterRegistry.counter("point.expired.amount").increment(expired.getExpiredAmount());
     }
 
     private void count(String name, PointTransactionType type) {

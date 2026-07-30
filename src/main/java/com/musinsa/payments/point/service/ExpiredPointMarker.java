@@ -21,9 +21,11 @@ public class ExpiredPointMarker {
     public ExpirationResult markFor(Long userId, LocalDateTime baseTime) {
         userPointLocker.lock(userId);
 
-        List<EarnedPoint> targets = earnedPointRepository.findExpirablePointsOf(
-                userId, EarnedPointStatus.AVAILABLE, baseTime);
+        return expire(earnedPointRepository.findExpirablePointsOf(
+                userId, EarnedPointStatus.AVAILABLE, baseTime));
+    }
 
+    private ExpirationResult expire(List<EarnedPoint> targets) {
         long expiredAmount = 0;
         for (EarnedPoint earnedPoint : targets) {
             expiredAmount += earnedPoint.getRemainingAmount();

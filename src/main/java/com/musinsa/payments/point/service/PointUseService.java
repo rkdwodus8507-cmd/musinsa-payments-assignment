@@ -102,7 +102,7 @@ public class PointUseService {
     }
 
     private void restoreInUsedOrder(List<PointUsage> usages, PointTransaction cancelTransaction, LocalDateTime now) {
-        Map<Long, EarnedPoint> sources = sourcesOf(usages);
+        EarnedPointSources sources = earnedPointReader.sourcesOf(usages);
 
         long remaining = cancelTransaction.getAmount();
         for (PointUsage usage : usages) {
@@ -114,7 +114,7 @@ public class PointUseService {
                 continue;
             }
             usage.cancel(restored);
-            giveBack(usage, sources.get(usage.getEarnedPointId()), restored, cancelTransaction, now);
+            giveBack(usage, sources.of(usage), restored, cancelTransaction, now);
             remaining -= restored;
         }
     }
@@ -195,18 +195,14 @@ public class PointUseService {
     }
 
     private List<UsedPointDetail> toUsedDetails(List<PointUsage> usages) {
-        Map<Long, EarnedPoint> sources = sourcesOf(usages);
-        Map<Long, String> earnPointKeys = transactionReader.earnPointKeysByEarnedPointId(sources.values());
+        EarnedPointSources sources = earnedPointReader.sourcesOf(usages);
 
         return usages.stream()
-                .map(usage -> {
-                    EarnedPoint source = sources.get(usage.getEarnedPointId());
-                    return new UsedPointDetail(
-                            earnPointKeys.get(source.getId()),
-                            usage.getAmount(),
-                            source.isManual(),
-                            source.getExpireAt());
-                })
+                .map(usage -> new UsedPointDetail(
+                        sources.earnPointKeyOf(usage),
+                        usage.getAmount(),
+                        sources.of(usage).isManual(),
+                        sources.of(usage).getExpireAt()))
                 .toList();
     }
 
@@ -244,11 +240,6 @@ public class PointUseService {
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();
-    }
-
-    private Map<Long, EarnedPoint> sourcesOf(List<PointUsage> usages) {
-        return earnedPointReader.byIds(
-                usages.stream().map(PointUsage::getEarnedPointId).distinct().toList());
     }
 
     private List<PointUsage> usagesOf(PointTransaction useTransaction) {

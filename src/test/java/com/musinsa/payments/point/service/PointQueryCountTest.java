@@ -2,12 +2,9 @@ package com.musinsa.payments.point.service;
 
 import com.musinsa.payments.point.service.dto.UseResult;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
-import jakarta.persistence.EntityManagerFactory;
-import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -18,8 +15,6 @@ class PointQueryCountTest extends IntegrationTestSupport {
     private static final int FEW = 2;
     private static final int MANY = 6;
 
-    @Autowired
-    private EntityManagerFactory entityManagerFactory;
 
     @Test
     @DisplayName("사용은 적립분당 쓰기 2건(사용상세 insert + 적립분 update)만 늘어난다")
@@ -52,7 +47,7 @@ class PointQueryCountTest extends IntegrationTestSupport {
     private long countStatementsForUse(int sourceCount) {
         earnAcross(sourceCount);
 
-        Statistics statistics = startCounting();
+        Statistics statistics = startCountingQueries();
         use(ORDER_ID, sourceCount * 100L);
         return statistics.getPrepareStatementCount();
     }
@@ -60,7 +55,7 @@ class PointQueryCountTest extends IntegrationTestSupport {
     private long countStatementsForCancelUse(int sourceCount) {
         UseResult use = useAcross(sourceCount);
 
-        Statistics statistics = startCounting();
+        Statistics statistics = startCountingQueries();
         cancelUse(use.getPointKey(), sourceCount * 100L);
         return statistics.getPrepareStatementCount();
     }
@@ -69,7 +64,7 @@ class PointQueryCountTest extends IntegrationTestSupport {
         UseResult use = useAcross(sourceCount);
         clock.plusDays(400);
 
-        Statistics statistics = startCounting();
+        Statistics statistics = startCountingQueries();
         cancelUse(use.getPointKey(), sourceCount * 100L);
         return statistics.getPrepareStatementCount();
     }
@@ -85,10 +80,4 @@ class PointQueryCountTest extends IntegrationTestSupport {
         }
     }
 
-    private Statistics startCounting() {
-        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
-        statistics.setStatisticsEnabled(true);
-        statistics.clear();
-        return statistics;
-    }
 }
