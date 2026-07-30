@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 public class PointIdempotencyGuard {
 
     private final PointTransactionRepository transactionRepository;
+    private final PointAuditLogger auditLogger;
 
     public <T> T runOnce(Long userId,
                          String requestKey,
@@ -24,6 +25,7 @@ public class PointIdempotencyGuard {
                          Supplier<T> whenFirstRequest) {
         Optional<PointTransaction> handled = findHandled(userId, requestKey, type);
         if (handled.isPresent()) {
+            auditLogger.recordDuplicate(handled.get());
             return whenAlreadyHandled.apply(handled.get());
         }
         return whenFirstRequest.get();

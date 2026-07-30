@@ -29,6 +29,7 @@ public class PointEarnService {
     private final UserPointLocker userPointLocker;
     private final PointTransactionReader transactionReader;
     private final PointIdempotencyGuard idempotencyGuard;
+    private final PointAuditLogger auditLogger;
     private final Clock clock;
 
     @Transactional
@@ -62,7 +63,7 @@ public class PointEarnService {
                 command.getUserId(), command.getAmount(), command.getMemo(), command.getRequestKey(), now));
         earnedPointRepository.save(EarnedPoint.from(earnTransaction, command.isManual(), expireAt, now));
 
-        return toEarnResult(earnTransaction);
+        return audited(earnTransaction, toEarnResult(earnTransaction));
     }
 
     private EarnCancelResult takeBackPoints(PointTransaction earnTransaction, String requestKey) {
@@ -73,7 +74,17 @@ public class PointEarnService {
         PointTransaction cancelTransaction = transactionRepository.save(PointTransaction.earnCancel(
                 earnTransaction, earnedPoint.getOriginalAmount(), requestKey, now));
 
-        return toEarnCancelResult(cancelTransaction);
+        return audited(cancelTransaction, toEarnCancelResult(cancelTransaction));
+    }
+
+    private EarnResult audited(PointTransaction transaction, EarnResult result) {
+        auditLogger.recordMutation(transaction, result.getBalance());
+        return result;
+    }
+
+    private EarnCancelResult audited(PointTransaction transaction, EarnCancelResult result) {
+        auditLogger.recordMutation(transaction, result.getBalance());
+        return result;
     }
 
     private EarnResult toEarnResult(PointTransaction earnTransaction) {

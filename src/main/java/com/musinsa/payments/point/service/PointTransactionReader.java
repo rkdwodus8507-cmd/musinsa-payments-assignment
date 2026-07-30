@@ -4,6 +4,7 @@ import com.musinsa.payments.point.domain.EarnedPoint;
 import com.musinsa.payments.point.domain.PointTransaction;
 import com.musinsa.payments.point.domain.PointTransactionType;
 import com.musinsa.payments.point.repository.PointTransactionRepository;
+import com.musinsa.payments.point.support.IdChunks;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
 import java.util.Collection;
@@ -29,7 +30,8 @@ public class PointTransactionReader {
         if (ids.isEmpty()) {
             return Map.of();
         }
-        return transactionRepository.findByIdIn(ids).stream()
+        return IdChunks.split(ids).stream()
+                .flatMap(chunk -> transactionRepository.findByIdIn(chunk).stream())
                 .collect(Collectors.toMap(PointTransaction::getId, PointTransaction::getPointKey));
     }
 

@@ -21,9 +21,12 @@ import com.musinsa.payments.point.service.dto.UseResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,9 +37,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "포인트", description = "무료 포인트 적립 / 적립취소 / 사용 / 사용취소")
 @RestController
+@Validated
 @RequestMapping("/api/v1/points")
 @RequiredArgsConstructor
 public class PointController {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final PointEarnService earnService;
     private final PointUseService useService;
@@ -80,8 +86,8 @@ public class PointController {
     @Operation(summary = "포인트 거래 이력 조회")
     @GetMapping("/transactions")
     public Page<TransactionResult> getTransactions(@RequestParam Long userId,
-                                                  @RequestParam(defaultValue = "0") int page,
-                                                  @RequestParam(defaultValue = "20") int size) {
+                                                  @RequestParam(defaultValue = "0") @Min(0) int page,
+                                                  @RequestParam(defaultValue = "20") @Min(1) @Max(MAX_PAGE_SIZE) int size) {
         return queryService.getTransactions(userId, PageRequest.of(page, size));
     }
 

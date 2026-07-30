@@ -3,6 +3,7 @@ package com.musinsa.payments.point.service;
 import com.musinsa.payments.point.domain.EarnedPoint;
 import com.musinsa.payments.point.domain.EarnedPointStatus;
 import com.musinsa.payments.point.repository.EarnedPointRepository;
+import com.musinsa.payments.point.support.IdChunks;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
@@ -36,7 +37,8 @@ public class EarnedPointReader {
 
 
     public Map<Long, EarnedPoint> byIds(Collection<Long> earnedPointIds) {
-        Map<Long, EarnedPoint> found = earnedPointRepository.findAllById(earnedPointIds).stream()
+        Map<Long, EarnedPoint> found = IdChunks.split(earnedPointIds).stream()
+                .flatMap(chunk -> earnedPointRepository.findAllById(chunk).stream())
                 .collect(Collectors.toMap(EarnedPoint::getId, Function.identity()));
         if (found.size() != earnedPointIds.size()) {
             throw PointException.of(ErrorCode.EARNED_POINT_NOT_FOUND, "ids=" + earnedPointIds);

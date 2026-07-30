@@ -42,6 +42,7 @@ public class PointUseService {
     private final UserPointLocker userPointLocker;
     private final PointTransactionReader transactionReader;
     private final PointIdempotencyGuard idempotencyGuard;
+    private final PointAuditLogger auditLogger;
     private final Clock clock;
 
     @Transactional
@@ -72,7 +73,7 @@ public class PointUseService {
                 command.getUserId(), command.getAmount(), command.getOrderId(), command.getRequestKey(), now));
         deductInPriorityOrder(sources, useTransaction, now);
 
-        return toUseResult(useTransaction);
+        return audited(useTransaction, toUseResult(useTransaction));
     }
 
     private void deductInPriorityOrder(List<EarnedPoint> sources, PointTransaction useTransaction, LocalDateTime now) {
@@ -97,7 +98,7 @@ public class PointUseService {
                 useTransaction, command.getAmount(), command.getRequestKey(), now));
         restoreInUsedOrder(usages, cancelTransaction, now);
 
-        return toUseCancelResult(cancelTransaction);
+        return audited(cancelTransaction, toUseCancelResult(cancelTransaction));
     }
 
     private void restoreInUsedOrder(List<PointUsage> usages, PointTransaction cancelTransaction, LocalDateTime now) {
@@ -141,6 +142,16 @@ public class PointUseService {
         LocalDateTime expireAt = now.plusDays(policyReader.current().getDefaultExpireDays());
 
         return earnedPointRepository.save(EarnedPoint.from(reissuedTransaction, expired.isManual(), expireAt, now));
+    }
+
+    private UseResult audited(PointTransaction transaction, UseResult result) {
+        auditLogger.recordMutation(transaction, result.getBalance());
+        return result;
+    }
+
+    private UseCancelResult audited(PointTransaction transaction, UseCancelResult result) {
+        auditLogger.recordMutation(transaction, result.getBalance());
+        return result;
     }
 
     private UseResult toUseResult(PointTransaction useTransaction) {

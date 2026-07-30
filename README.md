@@ -272,7 +272,49 @@ Map<Long, String> earnPointKeys = transactionReader.earnPointKeysByEarnedPointId
 
 이 수치는 `PointQueryCountTest` 가 지키고 있어서, 나중에 루프 안에 조회가 다시 끼어들면 테스트가 깨집니다.
 
-### 6-9. 멱등성은 락 안에서 판정한다
+### 6-9. 만료 기준 시간대를 코드가 정한다
+
+`expireAt` 은 `LocalDateTime` 입니다. 타임존이 없는 타입이라 기준 시간대를 어딘가에서 정해야 하는데, 정하지 않으면 **서버 기본 시간대에 끌려갑니다.** 컨테이너가 UTC 로 뜨면 한국 사용자의 만료 시각이 9시간 밀립니다. 돈이 걸린 경계값이 배포 환경에 좌우되는 셈입니다.
+
+그래서 시간대를 설정으로 못박고 `Clock` 을 그 시간대로 고정합니다.
+
+```yaml
+point:
+  time-zone: Asia/Seoul
+```
+
+```java
+@Bean
+public Clock clock() {
+    return Clock.system(timeProperties.zoneId());
+}
+```
+
+`Instant` 로 저장하고 조회 시 사용자 시간대로 변환하는 쪽이 이론적으로는 더 정직합니다. 다만 이 시스템의 만료는 "한국 시간 기준 며칠"이라는 업무 규칙이라 기준 시간대가 하나뿐이고, 엔티티·DTO·테스트를 전부 바꾸는 비용에 비해 얻는 게 없다고 봤습니다. 대신 시간대가 코드 어디에서도 암묵적이지 않게 만들었습니다.
+
+### 6-10. 사고가 났을 때 추적할 수 있어야 한다
+
+포인트는 "누가 언제 얼마를 왜" 를 사후에 재구성할 수 있어야 합니다. 잔액이 바뀌는 네 지점에서만 전용 로거로 남깁니다.
+
+```
+2026-07-30 11:18:53.417  INFO [trace-abc] point-audit : type=EARN pointKey=ccd43d62-... userId=9
+  amount=1000 orderId=null requestKey=k9 relatedTransactionId=null balanceAfter=1000
+2026-07-30 11:18:53.441  INFO [trace-abc] point-audit : type=EARN pointKey=ccd43d62-... userId=9
+  requestKey=k9 duplicate=true
+```
+
+- 로거 이름이 `point-audit` 이라 운영에서 별도 파일·수집기로 분리할 수 있습니다.
+- `[trace-abc]` 는 `X-Request-Id` 입니다. `RequestIdFilter` 가 헤더를 받거나 없으면 발급해 MDC 에 넣고 응답 헤더로 되돌려줍니다. 클라이언트 로그와 서버 로그를 같은 키로 맞출 수 있습니다.
+- 재전송은 `duplicate=true` 로 따로 남고 잔액 변경 기록은 남지 않습니다. 같은 `pointKey` 가 두 줄에 걸쳐 나오므로 "중복 요청이 있었지만 한 번만 반영됐다"가 로그만으로 확인됩니다.
+
+`PointAuditLogTest` 가 로그 어펜더를 붙여 이 규칙을 검증합니다 — 변경 3건이면 3줄, 재전송이면 duplicate 1줄.
+
+### 6-11. 입력과 조회 크기에 상한을 둔다
+
+- 이력 조회 `size` 는 최대 100, `page` 는 0 이상입니다. 상한이 없으면 `?size=1000000` 한 번으로 힙이 갑니다.
+- `IN` 절에 들어가는 id 는 `IdChunks` 가 1000개씩 나눕니다. 적립분이 수천 개 걸린 사용을 취소할 때 IN 절이 폭발하지 않게 합니다.
+
+### 6-12. 멱등성은 락 안에서 판정한다
 
 네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다. 그래서 재시도한 클라이언트도 같은 `pointKey` 를 받습니다.
 
@@ -301,7 +343,7 @@ public UseResult use(UseCommand command) {
 
 전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
 
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-9](#6-9-멱등성은-락-안에서-판정한다) 참고.
+네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-12](#6-12-멱등성은-락-안에서-판정한다) 참고.
 
 ### 포인트
 
@@ -403,7 +445,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 ./gradlew test
 ```
 
-총 **89개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
+총 **97개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
 
 ### 단위 테스트 (스프링 없음, 40개)
 
@@ -428,6 +470,8 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 | `PointIdempotencyTest` | 같은 `requestKey` 재전송·동시 전송 시 한 번만 반영되는지 |
 | `PointQueryCountTest` | 적립분이 늘어도 조회 쿼리가 늘지 않는지 (Hibernate 통계로 실측) |
 | `PointApiTest` | HTTP 계층 (성공 흐름, 검증 실패, 에러 코드) |
+| `PointOperationalTest` | 업무 시간대 고정, 페이지 크기 상한, `X-Request-Id` 왕복 |
+| `PointAuditLogTest` | 잔액이 바뀐 거래만 감사 로그에 남는지 (로그 어펜더로 검증) |
 
 **컨텍스트는 1개만 뜹니다.** 통합 테스트 전부가 `IntegrationTestSupport` 를 상속하고 설정이 같아서 스프링 테스트가 컨텍스트를 캐싱합니다. 예전에는 `PointApiTest` 만 `@AutoConfigureMockMvc` 를 따로 붙여 컨텍스트가 2개 떴는데, 공용 베이스로 올려 하나로 합쳤습니다.
 
@@ -514,8 +558,10 @@ src/main/java/com/musinsa/payments/point/
 
 ## 11. 한계와 개선 방향
 
-- **멱등성 키에 요청 본문 해시를 함께 저장하지 않습니다.** 같은 `requestKey` 에 다른 금액이 오면 최초 결과를 반환합니다. 엄격히는 422 로 거절해야 맞습니다.
-- **잔액 조회가 매번 합산입니다.** 5-1에 적은 대로 적립분이 많아지면 스냅샷 도입이 필요합니다.
+- **H2 전용 문법과 락 동작 차이.** `MERGE ... KEY` 는 MySQL 에서 `INSERT ... ON DUPLICATE KEY UPDATE` 로 바꿔야 합니다. 더 중요한 건 H2 의 `SELECT ... FOR UPDATE` 와 MySQL 의 갭 락 동작이 달라, **지금 통과하는 동시성 테스트가 MySQL 에서 같은 결과를 보장하지 않습니다.** 실제 이관 시 MySQL 로 같은 테스트를 다시 돌려야 합니다.
+- **인증·인가가 없습니다.** `userId` 를 요청으로 받고, 관리자 API 도 열려 있습니다. 실서비스라면 관리자 API 는 내부망 + 별도 인증 + 조작자 식별이 필요합니다.
+- **데이터 수명 정책이 없습니다.** `point_transaction` / `point_usage` 는 무한히 쌓입니다. 오래된 이력은 S3 + Athena 로 아카이빙하고 원장만 남기는 편이 맞습니다.
 - **만료 배치가 단일 인스턴스 가정입니다.** 다중 인스턴스에서는 리더 선출이나 분산 락이 필요합니다.
-- **`MERGE ... KEY` 는 H2 문법입니다.** MySQL 이관 시 `INSERT ... ON DUPLICATE KEY UPDATE` 로 바꿔야 합니다.
-- **FK 제약을 걸지 않았습니다.** 애플리케이션 레벨 참조로 두어 이후 샤딩·아카이빙 유연성을 확보했습니다. 대신 참조 무결성은 서비스와 테스트로 보장합니다.
+- **잔액 조회가 매번 합산입니다.** 적립분이 수만 건까지 쌓이면 스냅샷 테이블이 필요합니다 ([6-1](#6-1-잔액을-컬럼으로-저장하지-않는다)).
+- **멱등성 키에 요청 본문 해시를 함께 저장하지 않습니다.** 같은 `requestKey` 에 다른 금액이 오면 최초 결과를 반환합니다. 엄격히는 422 로 거절해야 맞습니다.
+- **메트릭이 없습니다.** 감사 로그는 남기지만 적립/사용 실패율, 락 대기 시간, 배치 지연을 지표로 노출하지 않습니다. Micrometer + Prometheus 가 다음 단계입니다.

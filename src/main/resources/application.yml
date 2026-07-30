@@ -24,6 +24,7 @@ spring:
       schema-locations: classpath:db/schema.sql
 
 point:
+  time-zone: Asia/Seoul
   policy:
     min-earn-amount: 1
     max-earn-amount: 100000
@@ -42,5 +43,8 @@ springdoc:
     operations-sorter: method
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{requestId:-no-request-id}] %-40.40logger{39} : %m%n"
   level:
     com.musinsa.payments.point: DEBUG
+    point-audit: INFO

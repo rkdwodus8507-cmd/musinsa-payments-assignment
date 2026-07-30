@@ -12,6 +12,6 @@ public class TestClockConfig {
     @Bean
     @Primary
     public MutableClock mutableClock() {
-        return new MutableClock(ZoneId.systemDefault());
+        return new MutableClock(ZoneId.of("Asia/Seoul"));
     }
 }

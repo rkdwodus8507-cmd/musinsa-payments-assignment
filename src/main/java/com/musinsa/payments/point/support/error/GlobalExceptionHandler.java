@@ -1,5 +1,7 @@
 package com.musinsa.payments.point.support.error;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -37,6 +39,15 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse("INVALID_REQUEST", message));
     }
 
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException e) {
+        String message = e.getConstraintViolations().stream()
+                .map(violation -> lastPathNode(violation) + ": " + violation.getMessage())
+                .collect(Collectors.joining(", "));
+        return ResponseEntity.badRequest()
+                .body(new ErrorResponse("INVALID_REQUEST", message));
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException e) {
         return ResponseEntity.badRequest()
@@ -54,6 +65,11 @@ public class GlobalExceptionHandler {
         log.error("unexpected error", e);
         return ResponseEntity.status(ErrorCode.INTERNAL_ERROR.getStatus())
                 .body(ErrorResponse.of(ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.getMessage()));
+    }
+
+    private String lastPathNode(ConstraintViolation<?> violation) {
+        String path = violation.getPropertyPath().toString();
+        return path.substring(path.lastIndexOf('.') + 1);
     }
 
     private String describe(FieldError error) {
