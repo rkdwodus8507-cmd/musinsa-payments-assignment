@@ -1,3 +1,11 @@
+drop table if exists point_usage_cancellation;
+drop table if exists point_usage;
+drop table if exists earned_point;
+drop table if exists point_transaction;
+drop table if exists user_point_lock;
+drop table if exists point_policy;
+drop table if exists batch_lock;
+
 create table point_policy
 (
     id                  bigint    not null,

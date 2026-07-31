@@ -3,9 +3,9 @@ package com.musinsa.payments.point.service;
 import com.musinsa.payments.point.repository.UserPointLockRepository;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.LocalDateTime;
-import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
 public class UserPointLocker {
 
     private final UserPointLockRepository lockRepository;
-    private final UserPointLockRegistrar lockRegistrar;
     private final MeterRegistry meterRegistry;
     private final Clock clock;
 
@@ -26,7 +25,7 @@ public class UserPointLocker {
         if (lockRepository.findByUserIdForUpdate(userId).isPresent()) {
             return;
         }
-        lockRegistrar.registerIfAbsent(userId, LocalDateTime.now(clock));
+        lockRepository.upsert(userId, LocalDateTime.now(clock));
         lockRepository.findByUserIdForUpdate(userId)
                 .orElseThrow(() -> PointException.of(ErrorCode.INTERNAL_ERROR, "락 획득에 실패했습니다. userId=" + userId));
     }
