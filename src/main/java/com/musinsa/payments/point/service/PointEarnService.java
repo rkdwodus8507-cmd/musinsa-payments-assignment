@@ -10,8 +10,6 @@ import com.musinsa.payments.point.service.dto.CancelEarnCommand;
 import com.musinsa.payments.point.service.dto.EarnCancelResult;
 import com.musinsa.payments.point.service.dto.EarnCommand;
 import com.musinsa.payments.point.service.dto.EarnResult;
-import com.musinsa.payments.point.support.error.ErrorCode;
-import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;

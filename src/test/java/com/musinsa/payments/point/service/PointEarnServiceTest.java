@@ -10,7 +10,6 @@ import com.musinsa.payments.point.service.dto.UseResult;
 import com.musinsa.payments.point.support.IntegrationTestSupport;
 import com.musinsa.payments.point.support.MutableClock;
 import com.musinsa.payments.point.support.error.ErrorCode;
-import com.musinsa.payments.point.support.error.PointException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

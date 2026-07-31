@@ -141,6 +141,19 @@
   <path d="M310 405 L365 405 L365 208 L420 208" class="line" stroke-dasharray="5 4" marker-end="url(#arrow)"/>
   <text x="316" y="397" class="rel">user_id (논리적 참조)</text>
 
+  <!-- batch_lock -->
+  <g>
+    <rect x="850" y="790" width="340" height="172" rx="8" class="box"/>
+    <path d="M850 798 a8 8 0 0 1 8 -8 h324 a8 8 0 0 1 8 8 v30 h-340 z" class="hdr-cfg"/>
+    <text x="866" y="812" class="tname">batch_lock</text>
+    <text x="866" y="825" class="tnote">만료 배치를 한 인스턴스만 돌리기 위한 선점</text>
+    <text x="866" y="850" class="colpk">PK  name</text><text x="1092" y="850" class="type">varchar(64)</text>
+    <text x="866" y="869" class="col">holder</text><text x="1092" y="869" class="type">varchar(64)</text>
+    <text x="866" y="888" class="col">acquired_at</text><text x="1084" y="888" class="type">timestamp</text>
+    <text x="866" y="907" class="col">expires_at</text><text x="1084" y="907" class="type">timestamp</text>
+    <text x="866" y="929" class="rel">조건부 UPDATE 로 선점, TTL 로 회수</text>
+  </g>
+
   <!-- legend -->
   <g transform="translate(40, 790)">
     <rect x="0" y="0" width="780" height="172" rx="8" fill="#ffffff" stroke="#c9d4de" stroke-width="1.2"/>

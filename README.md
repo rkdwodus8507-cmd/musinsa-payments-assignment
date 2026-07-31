@@ -90,6 +90,7 @@ java -jar build/libs/free-point-system-1.0.0.jar --spring.profiles.active=local 
 | `point_usage_cancellation` | 사용취소 상세. 어느 적립분으로 돌아갔는지, 만료로 새로 적립했는지 기록 |
 | `user_point_lock` | **잔액 컬럼 없음.** 사용자 단위 락(`SELECT ... FOR UPDATE`) 대상으로만 존재 |
 | `point_policy` | 단일 행. 런타임에 변경 가능한 정책값 |
+| `batch_lock` | 만료 배치를 인스턴스 하나만 돌리기 위한 선점 행 ([6-15](#6-15-배치는-인스턴스-하나만-돈다)) |
 
 `earned_point.status` 는 `AVAILABLE` / `EXPIRED` / `CANCELED` 3가지입니다. 잔액이 0이 되는 것은 상태 전이가 아니라 `remaining_amount` 값 변화로만 표현해, 상태 머신을 단순하게 유지했습니다.
 
