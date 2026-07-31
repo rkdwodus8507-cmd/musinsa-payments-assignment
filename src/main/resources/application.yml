@@ -31,12 +31,6 @@ point:
     chunk-size: 500
     lock-ttl: PT10M
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics
-
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

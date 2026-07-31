@@ -44,7 +44,6 @@ java -jar build/libs/free-point-system-1.0.0.jar --spring.profiles.active=local 
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | OpenAPI 스펙 | http://localhost:8080/v3/api-docs |
 | H2 콘솔 | http://localhost:8080/h2-console (`local` 프로파일에서만, JDBC URL: `jdbc:h2:mem:point`, User: `sa`, 비밀번호 없음) |
-| 헬스 / 지표 | http://localhost:8080/actuator/health , http://localhost:8080/actuator/metrics |
 
 테스트만 실행하려면:
 
@@ -312,7 +311,6 @@ public Clock clock() {
 ```
 
 - 로거 이름이 `point-audit` 이라 운영에서 별도 파일·수집기로 분리할 수 있습니다.
-- 같은 지점에서 지표도 올립니다 — `point.transactions{type}`, `point.amount{type}`, `point.duplicate.requests{type}`, `point.expired.count/amount`. `/actuator/metrics` 로 노출됩니다.
 - 에러 응답에도 `requestId` 를 실어 보냅니다. 고객이 캡처를 보내오면 그 값으로 서버 로그를 바로 찾을 수 있습니다.
 - `[trace-abc]` 는 `X-Request-Id` 입니다. `RequestIdFilter` 가 헤더를 받거나 없으면 발급해 MDC 에 넣고 응답 헤더로 되돌려줍니다. 클라이언트 로그와 서버 로그를 같은 키로 맞출 수 있습니다.
 - 재전송은 `duplicate=true` 로 따로 남고 잔액 변경 기록은 남지 않습니다. 같은 `pointKey` 가 두 줄에 걸쳐 나오므로 "중복 요청이 있었지만 한 번만 반영됐다"가 로그만으로 확인됩니다.
@@ -386,20 +384,8 @@ where name = :name and expires_at <= :now
 
 `PointBatchLockTest` 가 세 가지를 확인합니다 — 다른 인스턴스가 잡고 있으면 건너뛰는지, 끝나면 반납하는지, TTL 이 지난 락을 회수하는지.
 
-### 6-16. 장애를 미리 보는 지표
 
-카운터만으로는 사고가 난 뒤에야 압니다. 시간과 적체를 봅니다.
-
-| 지표 | 종류 | 보는 것 |
-|---|---|---|
-| `point.lock.wait` | Timer | 사용자 락 대기 시간. 늘어나면 특정 사용자에 요청이 몰리거나 트랜잭션이 길어진 것 |
-| `point.expiration.duration` | Timer | 배치 소요 시간 |
-| `point.expiration.backlog` | Gauge | **만료 시각이 지났는데 아직 처리 안 된 적립분 수.** 0 이 아닌 채로 유지되면 배치가 밀리고 있다는 뜻 |
-
-backlog 는 배치 시작 시점에 세고 처리한 만큼 깎습니다. 스크레이프마다 DB 를 치지 않습니다.
-
-
-### 6-17. 멱등성은 락 안에서 판정한다
+### 6-16. 멱등성은 락 안에서 판정한다
 
 네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다. 그래서 재시도한 클라이언트도 같은 `pointKey` 를 받습니다.
 
@@ -428,7 +414,7 @@ public UseResult use(UseCommand command) {
 
 전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
 
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-17](#6-17-멱등성은-락-안에서-판정한다) 참고.
+네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-16](#6-16-멱등성은-락-안에서-판정한다) 참고.
 
 ### 포인트
 
@@ -653,4 +639,4 @@ src/main/java/com/musinsa/payments/point/
 - **데이터 수명 정책이 없습니다.** `point_transaction` / `point_usage` 는 무한히 쌓입니다. 오래된 이력은 S3 + Athena 로 아카이빙하고 원장만 남기는 편이 맞습니다.
 - **잔액 조회가 매번 합산입니다.** 적립분이 수만 건까지 쌓이면 스냅샷 테이블이 필요합니다 ([6-1](#6-1-잔액을-컬럼으로-저장하지-않는다)).
 - **멱등성 키에 요청 본문 해시를 함께 저장하지 않습니다.** 같은 `requestKey` 에 다른 금액이 오면 최초 결과를 반환합니다. 엄격히는 422 로 거절해야 맞습니다.
-- **지표를 내보낼 곳이 없습니다.** `/actuator/metrics` 로 노출만 하고 Prometheus 등으로 수집·경보하는 설정은 없습니다.
+- **지표를 내보내지 않습니다.** 감사 로그로 사후 추적은 되지만, 락 대기 시간·배치 지연·만료 적체 같은 값을 지표로 노출하지 않습니다. 실서비스라면 Micrometer 로 노출하고 그중 **만료 적체(만료 시각이 지났는데 미처리인 적립분 수)** 에 경보를 걸어야 합니다 — 배치가 밀리면 사용자가 이미 만료된 포인트를 계속 쓰게 되기 때문입니다.

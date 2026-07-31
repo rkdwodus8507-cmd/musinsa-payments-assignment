@@ -35,12 +35,9 @@ public class PointExpirationService {
 
     private ExpirationResult expireEveryOwnerAndRecord() {
         LocalDateTime baseTime = LocalDateTime.now(clock);
-        auditRecorder.recordExpirationBacklog(countExpirablePoints(baseTime));
-
-        long startedAt = System.nanoTime();
         ExpirationResult expired = expireEveryOwner(baseTime);
 
-        auditRecorder.recordExpiration(expired, baseTime, System.nanoTime() - startedAt);
+        auditRecorder.recordExpiration(expired, baseTime);
         return expired;
     }
 
@@ -65,7 +62,4 @@ public class PointExpirationService {
                 EarnedPointStatus.AVAILABLE, baseTime, PageRequest.of(0, expirationProperties.getChunkSize()));
     }
 
-    private long countExpirablePoints(LocalDateTime baseTime) {
-        return earnedPointRepository.countExpirablePoints(EarnedPointStatus.AVAILABLE, baseTime);
-    }
 }
