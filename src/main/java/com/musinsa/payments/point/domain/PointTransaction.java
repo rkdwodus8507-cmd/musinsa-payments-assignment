@@ -20,6 +20,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PointTransaction {
 
+    private static final String REISSUE_MEMO = "만료 포인트 사용취소로 인한 신규 적립";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -54,10 +56,10 @@ public class PointTransaction {
         return transaction;
     }
 
-    public static PointTransaction reissuedEarn(EarnedPoint expired, long amount, PointTransaction cancelTransaction, String memo, LocalDateTime now) {
+    public static PointTransaction reissuedEarn(EarnedPoint expired, long amount, PointTransaction cancelTransaction, LocalDateTime now) {
         PointTransaction transaction = newTransaction(expired.getUserId(), PointTransactionType.EARN, amount, now);
         transaction.relatedTransactionId = cancelTransaction.getId();
-        transaction.memo = memo;
+        transaction.memo = REISSUE_MEMO;
         return transaction;
     }
 

@@ -31,8 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class PointUseService {
 
-    private static final String REISSUE_MEMO = "만료 포인트 사용취소로 인한 신규 적립";
-
     private final PointTransactionRepository transactionRepository;
     private final EarnedPointRepository earnedPointRepository;
     private final PointUsageRepository usageRepository;
@@ -138,7 +136,7 @@ public class PointUseService {
 
     private EarnedPoint reissue(EarnedPoint expired, long amount, PointTransaction cancelTransaction, LocalDateTime now) {
         PointTransaction reissuedTransaction = transactionRepository.save(
-                PointTransaction.reissuedEarn(expired, amount, cancelTransaction, REISSUE_MEMO, now));
+                PointTransaction.reissuedEarn(expired, amount, cancelTransaction, now));
         LocalDateTime expireAt = now.plusDays(policyReader.current().getDefaultExpireDays());
 
         return earnedPointRepository.save(EarnedPoint.from(reissuedTransaction, expired.isManual(), expireAt, now));
