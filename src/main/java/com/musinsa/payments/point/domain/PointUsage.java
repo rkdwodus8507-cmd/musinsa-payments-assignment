@@ -23,22 +23,21 @@ public class PointUsage {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long useTransactionId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long earnedPointId;
 
-    @Column(nullable = false, updatable = false, length = 64)
+    @Column(updatable = false)
     private String orderId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private long amount;
 
-    @Column(nullable = false)
     private long canceledAmount;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime createdAt;
 
     public static PointUsage of(PointTransaction useTransaction, EarnedPoint source, long amount, LocalDateTime now) {

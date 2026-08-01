@@ -25,29 +25,27 @@ public class EarnedPoint {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long transactionId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long userId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private long originalAmount;
 
-    @Column(nullable = false)
     private long remainingAmount;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private boolean manual;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
     private EarnedPointStatus status;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime expireAt;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime createdAt;
 
     public static EarnedPoint from(PointTransaction earnTransaction, boolean manual, LocalDateTime expireAt, LocalDateTime now) {

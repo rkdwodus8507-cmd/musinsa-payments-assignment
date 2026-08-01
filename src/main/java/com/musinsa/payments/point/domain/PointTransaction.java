@@ -24,31 +24,27 @@ public class PointTransaction {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, updatable = false, length = 36)
+    @Column(updatable = false)
     private String pointKey;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long userId;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
     private PointTransactionType type;
 
-    @Column(nullable = false)
     private long amount;
 
-    @Column(length = 64)
     private String orderId;
 
     private Long relatedTransactionId;
 
-    @Column(length = 64, updatable = false)
+    @Column(updatable = false)
     private String requestKey;
 
-    @Column(length = 255)
     private String memo;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime createdAt;
 
     public static PointTransaction earn(Long userId, long amount, String memo, String requestKey, LocalDateTime now) {

@@ -21,10 +21,10 @@ public class UserPointLock {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long userId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime createdAt;
 
     public static UserPointLock of(Long userId, LocalDateTime now) {

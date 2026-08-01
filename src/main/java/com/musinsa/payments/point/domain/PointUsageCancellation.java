@@ -21,22 +21,22 @@ public class PointUsageCancellation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long cancelTransactionId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long pointUsageId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private long amount;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private Long sourceEarnedPointId;
 
     @Column(updatable = false)
     private Long reissuedEarnedPointId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(updatable = false)
     private LocalDateTime createdAt;
 
     public static PointUsageCancellation restored(PointTransaction cancelTransaction,

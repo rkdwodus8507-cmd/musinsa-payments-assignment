@@ -2,7 +2,6 @@ package com.musinsa.payments.point.domain;
 
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
-import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -24,25 +23,18 @@ public class PointPolicy {
     @Id
     private Long id;
 
-    @Column(nullable = false)
     private long minEarnAmount;
 
-    @Column(nullable = false)
     private long maxEarnAmount;
 
-    @Column(nullable = false)
     private long maxUserBalance;
 
-    @Column(nullable = false)
     private int defaultExpireDays;
 
-    @Column(nullable = false)
     private int minExpireDays;
 
-    @Column(nullable = false)
     private int maxExpireDays;
 
-    @Column(nullable = false)
     private LocalDateTime updatedAt;
 
     public static PointPolicy create(PointPolicyValues values, LocalDateTime now) {
