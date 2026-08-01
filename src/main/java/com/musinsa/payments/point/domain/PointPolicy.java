@@ -56,10 +56,6 @@ public class PointPolicy {
         apply(values, now);
     }
 
-    public PointPolicyValues values() {
-        return new PointPolicyValues(
-                minEarnAmount, maxEarnAmount, maxUserBalance, defaultExpireDays, minExpireDays, maxExpireDays);
-    }
 
     public void validateEarnAmount(long amount) {
         if (amount < minEarnAmount || amount > maxEarnAmount) {

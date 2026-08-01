@@ -5,9 +5,7 @@ import lombok.Value;
 @Value
 public class ErrorResponse {
 
-    private final String code;
-
-    private final String message;
-
-    private final String requestId;
+    String code;
+    String message;
+    String requestId;
 }

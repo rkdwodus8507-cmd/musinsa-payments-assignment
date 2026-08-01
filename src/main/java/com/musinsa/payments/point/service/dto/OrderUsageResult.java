@@ -6,11 +6,8 @@ import lombok.Value;
 @Value
 public class OrderUsageResult {
 
-    private final String orderId;
-
-    private final long usedAmount;
-
-    private final long canceledAmount;
-
-    private final List<OrderUsageDetail> details;
+    String orderId;
+    long usedAmount;
+    long canceledAmount;
+    List<OrderUsageDetail> details;
 }

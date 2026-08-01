@@ -41,14 +41,13 @@ public class PointPolicyService {
     }
 
     private PolicyResult toResult(PointPolicy policy) {
-        PointPolicyValues values = policy.values();
         return new PolicyResult(
-                values.getMinEarnAmount(),
-                values.getMaxEarnAmount(),
-                values.getMaxUserBalance(),
-                values.getDefaultExpireDays(),
-                values.getMinExpireDays(),
-                values.getMaxExpireDays(),
+                policy.getMinEarnAmount(),
+                policy.getMaxEarnAmount(),
+                policy.getMaxUserBalance(),
+                policy.getDefaultExpireDays(),
+                policy.getMinExpireDays(),
+                policy.getMaxExpireDays(),
                 policy.getUpdatedAt());
     }
 }

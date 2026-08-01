@@ -6,15 +6,10 @@ import lombok.Value;
 @Value
 public class UseResult {
 
-    private final String pointKey;
-
-    private final Long userId;
-
-    private final String orderId;
-
-    private final long amount;
-
-    private final long balance;
-
-    private final List<UsedPointDetail> details;
+    String pointKey;
+    Long userId;
+    String orderId;
+    long amount;
+    long balance;
+    List<UsedPointDetail> details;
 }

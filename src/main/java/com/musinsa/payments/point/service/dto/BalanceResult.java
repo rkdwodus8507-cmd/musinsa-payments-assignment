@@ -6,11 +6,8 @@ import lombok.Value;
 @Value
 public class BalanceResult {
 
-    private final Long userId;
-
-    private final long balance;
-
-    private final long manualBalance;
-
-    private final List<EarnedPointSummary> earnedPoints;
+    Long userId;
+    long balance;
+    long manualBalance;
+    List<EarnedPointSummary> earnedPoints;
 }

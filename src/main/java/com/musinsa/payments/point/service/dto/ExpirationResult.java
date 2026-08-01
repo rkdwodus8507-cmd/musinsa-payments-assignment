@@ -5,7 +5,6 @@ import lombok.Value;
 @Value
 public class ExpirationResult {
 
-    private final int expiredCount;
-
-    private final long expiredAmount;
+    int expiredCount;
+    long expiredAmount;
 }

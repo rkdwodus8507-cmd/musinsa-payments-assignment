@@ -6,11 +6,8 @@ import lombok.Value;
 @Value
 public class UsedPointDetail {
 
-    private final String earnPointKey;
-
-    private final long amount;
-
-    private final boolean manual;
-
-    private final LocalDateTime expireAt;
+    String earnPointKey;
+    long amount;
+    boolean manual;
+    LocalDateTime expireAt;
 }

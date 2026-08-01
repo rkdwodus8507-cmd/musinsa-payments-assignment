@@ -5,7 +5,6 @@ import lombok.Value;
 @Value
 public class CancelEarnCommand {
 
-    private final String earnPointKey;
-
-    private final String requestKey;
+    String earnPointKey;
+    String requestKey;
 }

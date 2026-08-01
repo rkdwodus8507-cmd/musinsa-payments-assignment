@@ -6,19 +6,12 @@ import lombok.Value;
 @Value
 public class UseCancelResult {
 
-    private final String pointKey;
-
-    private final String canceledUsePointKey;
-
-    private final Long userId;
-
-    private final String orderId;
-
-    private final long amount;
-
-    private final long remainingCancelableAmount;
-
-    private final long balance;
-
-    private final List<CanceledPointDetail> details;
+    String pointKey;
+    String canceledUsePointKey;
+    Long userId;
+    String orderId;
+    long amount;
+    long remainingCancelableAmount;
+    long balance;
+    List<CanceledPointDetail> details;
 }

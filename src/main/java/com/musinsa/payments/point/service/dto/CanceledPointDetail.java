@@ -6,13 +6,9 @@ import lombok.Value;
 @Value
 public class CanceledPointDetail {
 
-    private final String earnPointKey;
-
-    private final long amount;
-
-    private final boolean reissued;
-
-    private final String reissuedPointKey;
-
-    private final LocalDateTime expireAt;
+    String earnPointKey;
+    long amount;
+    boolean reissued;
+    String reissuedPointKey;
+    LocalDateTime expireAt;
 }
