@@ -138,7 +138,3 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 4. **사용자 인증·인가는 구현 범위에서 제외했습니다.** `userId` 를 요청으로 받습니다.
 5. **주문 시스템 연동은 동기 API 호출을 가정했습니다.** 결제 흐름상 즉시 응답이 필요하기 때문입니다.
 6. **pointKey는 UUID입니다.** 과제 예시의 A/B/C/D/E는 설명용 기호로 해석했습니다.
-
----
-
-설계 판단의 배경과 알려진 한계는 [`docs/design.md`](docs/design.md) 에 정리했습니다.
