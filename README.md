@@ -2,25 +2,22 @@
 
 무신사페이먼츠 Backend Engineer 과제. 무료 포인트의 **적립 / 적립취소 / 사용 / 사용취소**를 제공하는 REST API입니다.
 
-포인트는 금전과 동일하게 다뤄야 하므로, 이 구현의 최우선 목표는 **어떤 시점에도 잔액과 원장이 어긋나지 않는 것**입니다. 그 목표에서 나온 설계 결정들을 아래 [핵심 설계 결정](#6-핵심-설계-결정)에 정리했습니다.
-
 ---
 
-## 1. 개발 환경
+## 개발 환경
 
 | 항목 | 버전 |
 |---|---|
-| Java | 21 (Temurin) |
+| Java | 21 |
 | Spring Boot | 3.5.16 |
 | DB | H2 (in-memory) |
-| Build | Gradle 8.14.3 (Kotlin DSL, wrapper 포함) |
-| API 문서 | springdoc-openapi 2.8.9 (Swagger UI) |
+| Build | Gradle 8.14.3 (wrapper 포함) |
 
 ---
 
-## 2. 빌드 및 실행
+## 빌드 및 실행
 
-별도 설치 없이 저장소에 포함된 Gradle wrapper로 실행됩니다. JDK 21만 있으면 됩니다.
+JDK 21만 있으면 됩니다. 저장소에 포함된 wrapper로 실행됩니다.
 
 ```bash
 ./gradlew clean build
@@ -30,30 +27,16 @@
 ./gradlew bootRun
 ```
 
-`bootRun` 은 `local` 프로파일로 뜹니다 — SQL 로그와 H2 콘솔이 켜져 코드를 훑어보기 편합니다. 패키징한 jar 는 기본 프로파일로 떠서 **SQL 로그가 꺼지고 H2 콘솔도 닫힙니다.**
-
-```bash
-java -jar build/libs/free-point-system-1.0.0.jar                          # 조용한 기본 설정
-java -jar build/libs/free-point-system-1.0.0.jar --spring.profiles.active=local   # 개발용
-```
-
-실행 후 접속 경로:
-
 | | URL |
 |---|---|
 | Swagger UI | http://localhost:8080/swagger-ui.html |
-| OpenAPI 스펙 | http://localhost:8080/v3/api-docs |
-| H2 콘솔 | http://localhost:8080/h2-console (`local` 프로파일에서만, JDBC URL: `jdbc:h2:mem:point`, User: `sa`, 비밀번호 없음) |
+| H2 콘솔 | http://localhost:8080/h2-console (JDBC URL: `jdbc:h2:mem:point`, User: `sa`, 비밀번호 없음) |
 
-테스트만 실행하려면:
-
-```bash
-./gradlew test
-```
+`bootRun` 은 `local` 프로파일로 떠서 SQL 로그와 H2 콘솔이 켜집니다. 패키징한 jar 는 기본 프로파일로 떠서 둘 다 꺼집니다.
 
 ---
 
-## 3. 요구사항 구현 현황
+## 요구사항 구현
 
 | # | 요구사항 | 구현 |
 |---|---|---|
@@ -61,7 +44,7 @@ java -jar build/libs/free-point-system-1.0.0.jar --spring.profiles.active=local 
 | 3-1-2 | 개인별 최대 보유금액 제한, **별도 방법으로 변경 가능** | 동일. `PUT /api/v1/admin/points/policies` 로 무중단 변경 |
 | 3-1-3 | 적립분이 **어떤 주문에서 1원 단위로** 사용됐는지 추적 | `point_usage` (적립분 × 사용거래 × 주문번호 × 금액) |
 | 3-1-4 | 관리자 수기지급분을 다른 적립과 **구분 식별** | `earned_point.manual` + 전용 엔드포인트 `POST /api/v1/admin/points/earn` |
-| 3-1-5 | 만료일 최소 1일 ~ **5년 미만**, 기본 365일 | 정책값(`min/max/defaultExpireDays`). 5년 미만은 시스템 불변식으로 상한 고정 |
+| 3-1-5 | 만료일 최소 1일 ~ **5년 미만**, 기본 365일 | 정책값(`min/max/defaultExpireDays`). 5년 미만은 도메인 불변식으로 상한 고정 |
 | 3-2-1 | 적립 취소는 전액만, **일부라도 사용됐으면 불가** | `EarnedPoint.cancel()` 에서 `remaining == original` 검증 |
 | 3-3-1 | 주문 시에만 사용 | 사용 API가 `orderId` 필수 |
 | 3-3-2 | 사용 시 주문번호 기록 | `point_transaction.order_id` + `point_usage.order_id` |
@@ -69,16 +52,14 @@ java -jar build/libs/free-point-system-1.0.0.jar --spring.profiles.active=local 
 | 3-4-1 | 전체 또는 일부 사용취소 | 부분취소 누적 지원 (`canceled_amount`) |
 | 3-4-2 | 취소 시점에 **이미 만료된 적립분은 신규적립 처리** | 복원 불가 시 새 EARN 거래 + 새 적립분 생성 |
 
-과제 명세 4장의 예시(A~E 전체 흐름)는 [`PointScenarioTest`](src/test/java/com/musinsa/payments/point/PointScenarioTest.java) 에 그대로 재현되어 있습니다.
-
-산출물:
+명세 4장의 예시(A~E 전체 흐름)는 [`PointScenarioTest`](src/test/java/com/musinsa/payments/point/PointScenarioTest.java) 에 그대로 재현되어 있습니다.
 
 - ERD — [`resource/erd.png`](resource/erd.png) ([SVG](resource/erd.svg))
 - AWS 아키텍처 (옵션) — [`resource/aws-architecture.png`](resource/aws-architecture.png) ([SVG](resource/aws-architecture.svg))
 
 ---
 
-## 4. 도메인 모델
+## 도메인 모델
 
 ![ERD](resource/erd.png)
 
@@ -91,179 +72,15 @@ java -jar build/libs/free-point-system-1.0.0.jar --spring.profiles.active=local 
 | `user_point_lock` | **잔액 컬럼 없음.** 사용자 단위 락(`SELECT ... FOR UPDATE`) 대상으로만 존재 |
 | `point_policy` | 단일 행. 런타임에 변경 가능한 정책값 |
 
-`earned_point.status` 는 `AVAILABLE` / `EXPIRED` / `CANCELED` 3가지입니다. 잔액이 0이 되는 것은 상태 전이가 아니라 `remaining_amount` 값 변화로만 표현해, 상태 머신을 단순하게 유지했습니다.
-
-**값 복사는 두지 않습니다.** `pointKey` 는 `point_transaction` 에만 있고, `point_usage` / `point_usage_cancellation` 은 id 로만 참조합니다. 사용/취소 상세 응답은 조인 대신 **id 목록을 모아 한 번에 읽어서** 조립합니다 — 적립분이 몇 개든 조회 쿼리 수는 고정입니다 ([6-7](#6-7-n1-은-짐작하지-않고-센다)).
+잔액은 컬럼으로 저장하지 않고 `SUM(earned_point.remaining_amount)` 로 계산합니다. 계산식에 `expire_at > now()` 가 들어 있어 만료 배치와 무관하게 항상 정확합니다.
 
 DDL과 인덱스는 [`src/main/resources/db/schema.sql`](src/main/resources/db/schema.sql) 에 있습니다.
 
 ---
 
-## 5. 계층 구조
+## API
 
-`controller → service → repository` 입니다. facade 는 두지 않았습니다 — 컨트롤러 메서드 11개 전부가 서비스 메서드를 정확히 하나만 호출하므로 위임만 하는 층이 늘어날 뿐입니다. 한 요청이 여러 서비스를 조율해야 할 때 넣는 게 맞다고 봤습니다.
-
-지키는 규칙은 셋입니다.
-
-- **엔티티는 서비스 계층을 벗어나지 않습니다.** 컨트롤러 반환 타입은 전부 DTO 이고 `service/dto` 의 어떤 클래스도 엔티티를 import 하지 않습니다.
-- **서비스가 다른 서비스를 호출하지 않습니다.** 정책·거래·적립분 조회는 `PointPolicyReader` / `PointTransactionReader` / `EarnedPointReader` 가 맡습니다.
-- **컨트롤러는 리포지토리도 설정도 보지 않습니다.**
-
-의존 방향은 전부 안쪽(도메인)을 향합니다. `api → domain` 이 한 군데 있는데(`UpdatePolicyRequest.toValues()`) 엔티티도 응답도 아닌 도메인 값 객체이고 방향이 안쪽이라 그대로 뒀습니다.
-
----
-
-## 6. 핵심 설계 결정
-
-### 6-1. 잔액을 컬럼으로 저장하지 않는다
-
-`user_point_lock.balance` 같은 캐시 컬럼 없이, 잔액은 항상 이렇게 계산합니다.
-
-```sql
-SELECT COALESCE(SUM(remaining_amount), 0) FROM earned_point
-WHERE user_id = ? AND status = 'AVAILABLE' AND expire_at > now()
-```
-
-만료는 시각이 지나면 발생하는데 컬럼 차감은 배치가 돌아야 반영됩니다. 잔액 컬럼을 두면 그 사이에 이미 만료된 포인트가 사용 가능한 것처럼 보입니다. 계산식에 `expire_at > now()` 가 들어 있으면 배치와 무관하게 항상 정확합니다.
-
-적립분이 수만 건까지 쌓이면 합산 비용이 문제가 됩니다. 그때는 스냅샷 테이블을 두되 원장을 정본으로 유지하는 방향이 맞다고 봅니다.
-
-### 6-2. 잔액을 바꾸는 모든 경로가 같은 락을 잡는다
-
-검사와 반영 사이가 원자적이어야 하므로 네 연산 모두 진입부에서 사용자 행을 잠급니다. 사용자 단위라 다른 사용자끼리는 경합하지 않습니다.
-
-```java
-userPointLocker.lock(userId);   // SELECT ... FOR UPDATE
-```
-
-**만료 배치도 같은 락을 잡습니다.** 잡지 않으면 좁지만 실제로 돈이 새는 경합이 있습니다.
-
-```
-1. 사용 트랜잭션: 락 획득 → expire_at > now 로 적립분 A 를 사용 가능으로 읽음
-2. 만료 배치(락 없음): 같은 A 를 expire_at <= now 로 읽어 EXPIRED 로 전이 → 커밋
-3. 사용 트랜잭션: A 에서 차감 → remaining_amount 만 update → 커밋
-   결과: EXPIRED 인데 잔액이 줄어든 적립분 = 만료된 포인트가 사용됨
-```
-
-그래서 배치를 사용자 단위로 돌립니다. 한 사용자를 처리하면 그 사용자의 만료 대상이 사라지므로 재조회가 비면 끝납니다. 사용자당 독립 트랜잭션이라 중간에 실패해도 이어서 재개되고 락 점유도 짧습니다.
-
-> 락 행이 없는 최초 요청은 `MERGE INTO user_point_lock ... KEY(user_id)` 로 만듭니다. 처음엔 `REQUIRES_NEW` 중첩 트랜잭션을 썼는데, 요청 하나가 커넥션 2개를 잡아 동시 요청이 풀 크기를 넘으면 교착에 빠졌습니다. 동시성 테스트에서 드러나 upsert 로 교체했습니다. MySQL 로 옮기면 이 한 줄만 `INSERT ... ON DUPLICATE KEY UPDATE` 로 바꾸면 됩니다.
-
-### 6-3. 정책값은 DB에 두고 API로 바꾼다
-
-yml `@ConfigurationProperties` 는 값을 바꾸려면 재기동해야 해서 "별도의 방법으로 변경 가능"이라는 요구를 온전히 만족하지 못한다고 봤습니다. `point_policy` 테이블 + 관리자 API 로 두고, yml 값은 최초 기동 시 시딩용으로만 씁니다.
-
-```bash
-curl -X PUT http://localhost:8080/api/v1/admin/points/policies \
-  -H 'Content-Type: application/json' \
-  -d '{"minEarnAmount":1,"maxEarnAmount":200000,"maxUserBalance":1000000,
-       "defaultExpireDays":365,"minExpireDays":1,"maxExpireDays":1824}'
-```
-
-`maxExpireDays` 상한 **1824일**은 "5년 미만"을 일 단위로 옮긴 값입니다. 이건 시스템 불변식이라 정책값으로 열지 않고 도메인에서 고정 검증합니다.
-
-### 6-4. 사용 순서와 사용취소 순서
-
-**사용**: `manual DESC, expire_at ASC, id ASC` — 수기지급분 우선, 그다음 만료 임박 순.
-
-**사용취소**: 사용된 순서 그대로(`point_usage.id ASC`) 되돌립니다. 과제 예시의 "1200원 중 1100원 취소 → A 1000 전액 + B 100" 과 일치합니다.
-
-**만료분 복원**: 복원 대상이 만료됐으면 되살릴 수 없으므로 새 EARN 거래와 적립분을 만듭니다(예시의 E). 만료일은 정책 기본값으로 새로 부여하고 `manual` 은 원래 적립분에서 승계합니다 — 수기지급분이 일반 적립분으로 바뀌면 사용 우선순위가 밀려 사용자에게 불리하기 때문입니다.
-
-### 6-5. 만료 기준 시간대를 코드가 정한다
-
-잔액 계산은 `expire_at > now()` 로 실시간 판정하고, 배치(기본 매일 04:00)는 지난 적립분을 `EXPIRED` 로 전이시켜 이력을 남기고 조회 대상을 줄이는 역할만 합니다.
-
-`expire_at` 은 `LocalDateTime` 이라 기준 시간대를 정하지 않으면 **서버 기본 시간대에 끌려갑니다.** 컨테이너가 UTC 로 뜨면 한국 사용자의 만료가 9시간 밀립니다. 돈이 걸린 경계값이 배포 환경에 좌우되면 안 되므로 설정으로 못박고 `Clock` 을 그 시간대로 고정했습니다.
-
-```yaml
-point:
-  time-zone: Asia/Seoul
-```
-
-`Instant` 로 저장하는 쪽이 이론적으로는 더 정직하지만, 이 시스템의 만료는 "한국 시간 기준 며칠"이라는 업무 규칙이라 기준 시간대가 하나뿐입니다. 엔티티·DTO·테스트를 전부 바꾸는 비용에 비해 얻는 게 없다고 봤습니다.
-
-### 6-6. 멱등성은 락 안에서 판정한다
-
-네 연산 모두 `requestKey` 를 받습니다. 같은 키로 재전송되면 새 거래를 만들지 않고 **처음 처리한 거래의 결과를 그대로 다시 조립해서** 돌려줍니다.
-
-```java
-public UseResult use(UseCommand command) {
-    userPointLocker.lock(command.getUserId());
-
-    return idempotencyGuard.runOnce(command.getUserId(), command.getRequestKey(), USE,
-            this::toUseResult,            // 이미 처리했으면 그 거래로 결과 재현
-            () -> deductPoints(command)); // 처음이면 실제 차감
-}
-```
-
-순서가 중요합니다. **락을 먼저 잡고 그다음에 requestKey 를 조회합니다.** 반대면 동시에 도착한 두 요청이 모두 "처리 이력 없음"으로 판정해 중복 차감이 일어납니다. `(user_id, request_key)` 유니크 제약이 마지막 안전망입니다.
-
-`toUseResult(transaction)` 은 최초 처리 경로와 재전송 경로가 함께 쓰는 단 하나의 응답 조립 지점입니다. 두 경로가 각자 응답을 만들면 시간이 지나며 어긋납니다.
-
-- `requestKey` 를 안 보내면 중복 차단은 적용되지 않습니다.
-- 같은 키를 다른 종류의 요청에 재사용하면 `REQUEST_KEY_CONFLICT` 로 거절합니다.
-- 같은 키에 **다른 금액**이 오면 최초 결과를 반환합니다. 엄격히는 422 로 거절해야 맞지만 단순함을 택했습니다.
-
-### 6-7. N+1 은 짐작하지 않고 센다
-
-정규화를 유지하면 상세 응답을 만들 때 `point_usage → earned_point → point_transaction` 을 타야 합니다. 건별로 타면 N+1 이 되고, 값을 복사해 두면 정규화가 깨집니다. **id 를 모아 한 번에 읽습니다.**
-
-```java
-EarnedPointSources sources = earnedPointReader.sourcesOf(usages);
-```
-
-Hibernate 통계로 재보니 적립분당 늘어나는 문장은 전부 없앨 수 없는 쓰기뿐이고 조회는 늘지 않습니다.
-
-| | 적립분당 문장 |
-|---|---|
-| 사용 | **2** (사용상세 insert + 적립분 update) |
-| 사용취소 | **3** (사용상세 update + 적립분 update + 취소상세 insert) |
-| 만료분 재적립 취소 | **4** (+ 거래 insert + 적립분 insert) |
-
-`reissue` 안의 `policyReader.current()` 는 루프 안에 있지만 N+1 이 아닙니다. 영속성 컨텍스트 1차 캐시가 두 번째 호출부터 DB 를 타지 않아 문장 수가 고정입니다. 눈으로는 N+1 처럼 보이지만 실제로는 아니어서 그대로 뒀습니다. 이 수치는 `PointQueryCountTest` 가 지킵니다.
-
-**크기에도 상한을 뒀습니다.** 잔액 조회는 적립분을 전부 메모리로 읽지 않고 집계 쿼리로 구하며 목록은 최근 100건까지, 이력 조회 `size` 는 최대 100, `IN` 절 id 는 `IdChunks` 가 1000개씩 나눕니다.
-
-### 6-8. 사고가 났을 때 추적할 수 있어야 한다
-
-포인트는 "누가 언제 얼마를 왜" 를 사후에 재구성할 수 있어야 합니다. 잔액이 바뀌는 네 지점에서만 전용 로거로 남깁니다.
-
-```
-2026-07-30 11:18:53.417  INFO [trace-abc] point-audit : type=EARN pointKey=ccd43d62-... userId=9
-  amount=1000 orderId=null requestKey=k9 relatedTransactionId=null balanceAfter=1000
-2026-07-30 11:18:53.441  INFO [trace-abc] point-audit : type=EARN pointKey=ccd43d62-... userId=9
-  requestKey=k9 duplicate=true
-```
-
-- 로거 이름이 `point-audit` 이라 운영에서 별도 파일·수집기로 분리할 수 있습니다.
-- `[trace-abc]` 는 `X-Request-Id` 입니다. `RequestIdFilter` 가 헤더를 받거나 없으면 발급해 MDC 에 넣고 응답 헤더와 에러 응답에 실어 보냅니다. 고객이 캡처를 보내오면 그 값으로 서버 로그를 찾을 수 있습니다.
-- 재전송은 `duplicate=true` 로 따로 남고 잔액 변경 기록은 남지 않습니다. 같은 `pointKey` 가 두 줄에 걸쳐 나오므로 "중복 요청이 있었지만 한 번만 반영됐다"가 로그만으로 확인됩니다.
-
-### 6-9. 읽기 위한 규칙
-
-**공개 메서드는 모두 세 줄로 읽힙니다** — 락 → 멱등성 판정 → 실제 처리. 조율하는 private 메서드도 같은 수준의 단계만 담고, 인라인 stream 합산이나 `throw` 는 이름 붙은 단계로 내렸습니다(`validateEnoughToUse`, `deductInPriorityOrder`, `giveBack`, `restoreInUsedOrder`). 메서드 이름만 훑어도 "적립분을 우선순위 순으로 차감한다", "사용된 순서대로 되돌려준다"가 읽힙니다.
-
-**객체를 만들 때는 위치 인자 대신 관련 엔티티를 넘깁니다.** `of(userId, EARN, amount, null, null, requestKey, memo, now)` 처럼 null 이 늘어서면 몇 번째가 무엇인지 알 수 없습니다.
-
-```java
-EarnedPoint.from(earnTransaction, manual, expireAt, now)
-PointUsage.of(useTransaction, source, amount, now)
-```
-
-**`record` 는 쓰지 않았습니다.** 실행 환경의 JDK 를 확정할 수 없을 때 언어 기능보다 평범한 클래스가 안전하다고 봤습니다. 이미 엔티티 전체가 Lombok 을 쓰므로 DTO 도 같은 방식으로 맞췄습니다 — 결과·커맨드는 `@Value`(불변 + `equals`), 요청·프로퍼티는 `@Getter @Setter @NoArgsConstructor @AllArgsConstructor`(파라미터 이름 정보 없이도 되는 JavaBean 역직렬화). JSON 필드명은 record 때와 동일합니다.
-
-**주석은 두지 않았습니다.** 이름으로 설명되지 않는 코드가 있으면 이름을 고쳤습니다. 중복은 스캐너로 훑어 3줄 이상 반복 블록을 22건 → 5건으로 줄였고, 남은 5건은 서로 다른 경계의 매핑·서로 다른 JPQL·서로 다른 DTO 인자 나열이라 합치면 손해입니다.
-
-**개발 편의 설정은 프로파일로 갈랐습니다.** `show-sql`, `DEBUG` 로그, H2 콘솔은 리뷰할 때는 편하지만 그대로 운영에 올리면 안 됩니다. `./gradlew bootRun` 은 `local` 을 자동으로 켜고, 패키징한 jar 는 기본값(조용한 쪽)으로 뜹니다.
-
-## 7. API
-
-전체 명세는 Swagger UI에서 확인할 수 있습니다. 요약은 다음과 같습니다.
-
-네 연산 모두 요청 본문에 `requestKey`(선택, 64자)를 받습니다. 같은 키로 재전송하면 중복 처리 없이 최초 결과를 그대로 돌려줍니다. 자세한 규칙은 [6-6](#6-6-멱등성은-락-안에서-판정한다) 참고.
-
-### 포인트
+전체 명세는 Swagger UI에서 확인할 수 있습니다. 네 연산 모두 요청 본문에 `requestKey`(선택)를 받으며, 같은 키로 재전송하면 중복 처리 없이 최초 결과를 돌려줍니다.
 
 | Method | Path | 설명 |
 |---|---|---|
@@ -274,30 +91,19 @@ PointUsage.of(useTransaction, source, amount, now)
 | GET | `/api/v1/points/balance?userId=` | 잔액 및 적립분 목록 |
 | GET | `/api/v1/points/transactions?userId=` | 거래 이력 (페이징) |
 | GET | `/api/v1/points/orders/{orderId}/usages` | **주문별 1원 단위 사용 추적** |
-
-### 관리자
-
-| Method | Path | 설명 |
-|---|---|---|
 | POST | `/api/v1/admin/points/earn` | 수기 지급 (`manual = true`) |
-| GET | `/api/v1/admin/points/policies` | 정책 조회 |
-| PUT | `/api/v1/admin/points/policies` | 정책 변경 |
+| GET · PUT | `/api/v1/admin/points/policies` | 정책 조회 / 변경 |
 | POST | `/api/v1/admin/points/expirations` | 만료 배치 수동 실행 |
-
-### 요청/응답 예시
-
-사용 — 어떤 적립분에서 얼마씩 빠졌는지 응답에 포함됩니다.
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/points/use \
   -H 'Content-Type: application/json' \
-  -d '{"userId":7,"orderId":"A1234","amount":1200}'
+  -d '{"userId":1,"orderId":"A1234","amount":1200}'
 ```
 
 ```json
 {
-  "pointKey": "b553be55-f131-42ff-91ef-9d92f15cae6e",
-  "orderId": "A1234", "amount": 1200, "balance": 600,
+  "pointKey": "b553be55-...", "orderId": "A1234", "amount": 1200, "balance": 300,
   "details": [
     { "earnPointKey": "301ce53b-...", "amount": 300, "manual": true },
     { "earnPointKey": "d634ab79-...", "amount": 900, "manual": false }
@@ -305,160 +111,34 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 }
 ```
 
-수기지급분 300원이 만료일이 더 길었음에도 먼저 사용된 것을 확인할 수 있습니다.
-
-사용취소 — 만료된 적립분은 `reissued: true` 로 표시되고 새 pointKey가 발급됩니다.
-
-```json
-{
-  "pointKey": "…(D)", "amount": 1100,
-  "remainingCancelableAmount": 100, "balance": 1400,
-  "details": [
-    { "earnPointKey": "…(A)", "amount": 1000, "reissued": true,  "reissuedPointKey": "…(E)" },
-    { "earnPointKey": "…(B)", "amount": 100,  "reissued": false, "reissuedPointKey": null }
-  ]
-}
-```
-
-### 에러 응답
-
-```json
-{ "code": "EARN_PARTIALLY_USED", "message": "일부가 사용된 적립은 취소할 수 없습니다. 적립: 1000, 잔액: 300" }
-```
-
-| 코드 | HTTP | 상황 |
-|---|---|---|
-| `INVALID_EARN_AMOUNT` | 400 | 1회 적립 가능 금액 범위 밖 |
-| `INVALID_EXPIRE_DAYS` | 400 | 만료일 범위 밖 |
-| `MAX_BALANCE_EXCEEDED` | 400 | 개인 최대 보유금액 초과 |
-| `INSUFFICIENT_BALANCE` | 400 | 사용 가능 포인트 부족 |
-| `EARN_PARTIALLY_USED` | 409 | 일부 사용된 적립의 취소 시도 |
-| `EARN_ALREADY_CANCELED` | 409 | 이미 취소된 적립 |
-| `EARN_ALREADY_EXPIRED` | 409 | 이미 만료된 적립의 취소 시도 |
-| `USE_CANCEL_AMOUNT_EXCEEDED` | 409 | 취소 가능 금액 초과 |
-| `REQUEST_KEY_CONFLICT` | 409 | 같은 `requestKey` 를 다른 종류의 요청에 재사용 |
-| `TRANSACTION_NOT_FOUND` | 404 | 존재하지 않는 pointKey |
+수기지급분이 만료일과 무관하게 먼저 사용된 것을 응답에서 확인할 수 있습니다. 에러는 `{"code": "...", "message": "...", "requestId": "..."}` 형태로 내려갑니다.
 
 ---
 
-## 8. 테스트
+## 테스트
 
 ```bash
 ./gradlew test
 ```
 
-총 **104개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
+총 **104개, 전부 통과**합니다.
 
-### 단위 테스트 (스프링 없음, 40개)
+- **단위 테스트 40개** — 도메인 규칙(적립 금액·만료일 경계, 차감/복원/취소 전이, 취소 가능 금액). 스프링 없이 0.06초
+- **통합 테스트 64개** — 명세 예시 시나리오, 동시 사용/적립, 멱등성, 쿼리 수, HTTP 계층. 컨텍스트 1개 공유
 
-도메인 규칙은 DB도 트랜잭션도 필요 없습니다. 엔티티만 만들어 검증합니다.
-
-| 테스트 | 내용 | 소요 |
-|---|---|---|
-| `PointPolicyTest` | 적립 금액·만료일 경계값, 보유한도, 정책값 유효성 | 0.05s |
-| `EarnedPointTest` | 차감/복원/취소/만료 전이, 사용·복원 가능 판정 | 0.01s |
-| `PointUsageTest` | 취소 가능 금액, 부분취소 누적 | 0.00s |
-| `PointTransactionTest` | 거래 종류별 생성 규칙, pointKey 발급 | 0.00s |
-
-### 통합 테스트 (스프링 컨텍스트 1개 공유, 64개)
-
-| 테스트 | 내용 |
-|---|---|
-| `PointScenarioTest` | **과제 명세 4장 예시(A~E)를 그대로 재현** |
-| `PointEarnServiceTest` | 정책이 적립에 반영되는지, 수기지급 구분, 적립취소 흐름 |
-| `PointUseServiceTest` | 수기지급 우선 / 만료임박 순 사용, 부분 취소 반복, 만료분 재적립 |
-| `PointPolicyServiceTest` | 정책 런타임 변경이 즉시 반영되는지 |
-| `PointConcurrencyTest` | 동시 사용/적립 시 초과 사용·한도 초과가 없는지 |
-| `PointIdempotencyTest` | 같은 `requestKey` 재전송·동시 전송 시 한 번만 반영되는지 |
-| `PointQueryCountTest` | 적립분이 늘어도 조회 쿼리가 늘지 않는지 (Hibernate 통계로 실측) |
-| `PointApiTest` | HTTP 계층 (성공 흐름, 검증 실패, 에러 코드) |
-| `PointOperationalTest` | 업무 시간대 고정, 페이지 크기 상한, `X-Request-Id` 왕복 |
-| `PointAuditLogTest` | 잔액이 바뀐 거래만 감사 로그에 남는지 (로그 어펜더로 검증) |
-| `PointExpirationServiceTest` | 만료 배치가 사용자 락을 잡는지, 다중 사용자 처리와 종료 |
-| `PointBalanceQueryTest` | 잔액 조회가 전체 적립분을 읽지 않는지 (Hibernate 통계로 실측) |
-
-**컨텍스트는 1개만 뜹니다.** 통합 테스트 전부가 `IntegrationTestSupport` 를 상속하고 설정이 같아 스프링 테스트가 캐싱합니다.
-
-시간 의존 로직(만료)은 `Clock` 빈을 주입받고, 테스트에서는 `MutableClock` 으로 대체해 시계를 직접 이동시킵니다. `Thread.sleep` 없이 만료 시나리오를 결정적으로 검증할 수 있습니다.
-
-동시성 테스트 예:
-
-```
-잔액 500 상태에서 100포인트 사용을 10건 동시 요청 → 정확히 5건 성공, 5건 INSUFFICIENT_BALANCE, 최종 잔액 0
-같은 requestKey 로 100포인트 사용을 10건 동시 요청 → 차감 1회, 최종 잔액 400
-```
+시간 의존 로직(만료)은 `Clock` 을 주입받고 테스트에서 `MutableClock` 으로 대체합니다. `Thread.sleep` 없이 만료 시나리오를 결정적으로 검증합니다.
 
 ---
 
-## 9. 명세에 없어 가정한 사항
+## 명세에 없어 가정한 사항
 
-명세에 명시되지 않아 판단이 필요했던 부분과 그 근거입니다.
-
-1. **사용취소로 인한 복원·재적립은 최대 보유 한도를 검증하지 않습니다.**
-   한도 때문에 정당한 취소가 실패하면 사용자의 포인트가 사라집니다. 취소는 이미 성립한 사용을 되돌리는 것이므로 신규 적립과 다르게 취급했습니다.
-
-2. **만료된 적립은 적립취소할 수 없습니다** (`EARN_ALREADY_EXPIRED`).
-   만료분은 이미 잔액이 없어 차감 대상이 없습니다. 명세에는 "일부 사용 시 불가"만 있으나 만료도 같은 이유로 막았습니다.
-
-3. **사용됐다가 전액 취소되어 잔액이 원금으로 돌아온 적립은 적립취소가 가능합니다.**
-   "일부가 사용된 경우"를 *사용 이력이 있는지*가 아니라 *현재 사용 중인 금액이 있는지*로 해석했습니다.
-
-4. **사용자 인증·인가는 구현 범위에서 제외했습니다.** `userId` 를 요청으로 받습니다. 실제 서비스라면 관리자 API는 내부망 + 별도 인증이 필요합니다.
-
+1. **사용취소로 인한 복원·재적립은 최대 보유 한도를 검증하지 않습니다.** 한도 때문에 정당한 취소가 실패하면 사용자의 포인트가 사라집니다.
+2. **만료된 적립은 적립취소할 수 없습니다** (`EARN_ALREADY_EXPIRED`). 만료분은 이미 잔액이 없어 차감 대상이 없습니다.
+3. **사용됐다가 전액 취소되어 잔액이 원금으로 돌아온 적립은 적립취소가 가능합니다.** "일부가 사용된 경우"를 *현재 사용 중인 금액이 있는지*로 해석했습니다.
+4. **사용자 인증·인가는 구현 범위에서 제외했습니다.** `userId` 를 요청으로 받습니다.
 5. **주문 시스템 연동은 동기 API 호출을 가정했습니다.** 결제 흐름상 즉시 응답이 필요하기 때문입니다.
-
 6. **pointKey는 UUID입니다.** 과제 예시의 A/B/C/D/E는 설명용 기호로 해석했습니다.
 
 ---
 
-## 10. 프로젝트 구조
-
-```
-src/main/java/com/musinsa/payments/point/
-├── api/                  컨트롤러, 요청 DTO
-├── config/               Clock·OpenAPI 빈, 프로퍼티, 정책 시딩
-├── domain/               엔티티. 검증과 상태 전이 규칙이 여기 있음
-│   PointTransaction  pointKey 부여 대상 · EarnedPoint  적립 단위 (deduct/restore/cancel/expire)
-│   PointUsage  사용 상세 · PointUsageCancellation  사용취소 상세 (복원 / 재적립)
-│   UserPointLock  락 대상 · PointPolicy  정책값과 검증
-├── repository/
-├── service/              트랜잭션 경계와 흐름 조율
-│   PointEarnService  적립/적립취소 · PointUseService  사용/사용취소(재적립 포함)
-│   PointQueryService  잔액·이력·주문별 추적 · PointPolicyService  정책
-│   PointExpirationService + ExpiredPointMarker  만료 배치 (청크 단위 트랜잭션)
-│   UserPointLocker  사용자 단위 직렬화 · PointIdempotencyGuard  requestKey 판정
-│   EarnedPointReader / PointTransactionReader  조회 · PointAuditRecorder  감사 로그
-│   └── dto/              커맨드 / 결과 DTO
-└── support/              에러 처리, 요청 추적, 배치 락, IN 절 분할
-```
-
-금액 계산 규칙과 상태 전이 조건은 서비스가 아니라 **엔티티 안**에 있습니다. 잘못된 차감·복원은 서비스 어디서 호출하든 엔티티에서 막힙니다.
-
-공개 비즈니스 메서드는 모두 같은 세 줄로 읽힙니다 — **락 → 멱등성 판정 → 실제 처리**. 자세한 내용은 [6-9](#6-9-읽기-위한-규칙) 에 정리했습니다.
-
-주석은 두지 않았습니다. 이름으로 설명되지 않는 코드가 있으면 이름을 고쳤습니다.
-
-중복은 스캐너로 훑어서 3줄 이상 반복되는 실행문 블록을 22건 → 2건으로 줄였습니다. 없앤 것은 이런 것들입니다.
-
-- 네 연산에 똑같이 반복되던 `락 → requestKey 조회 → 있으면 재현 / 없으면 처리` 6줄 → `PointIdempotencyGuard.runOnce(...)`
-- `earnByPointKey` / `useByPointKey` 의 조회 + 종류검증 본문 → 기대 타입과 에러코드만 받는 하나의 private 메서드
-- 정책 6개 값을 `create` / `update` / `apply` / 커맨드 DTO 가 각각 나열하던 것 → `PointPolicyValues` 하나로
-- 테스트의 `assertErrorCode`(3중복)와 스레드 실행 블록(2중복) → `IntegrationTestSupport` 로
-
-남긴 2건은 지우면 손해라고 봤습니다. `UpdatePolicyRequest.toValues()` / `PointPolicyProperties.toValues()` 는 HTTP 요청과 설정 파일이라는 서로 다른 경계가 각자 자기 매핑을 갖는 게 맞고, 합치려면 도메인 레코드에 `@ConfigurationProperties` 를 붙여야 합니다. `PointUsage` 에서 서로 다른 두 DTO 를 만드는 부분도 겹치는 건 접근자 3개뿐이라, 합치면 도메인이 응답 DTO 를 알게 됩니다.
-
-`deductInPriorityOrder` 와 `restoreInUsedOrder` 도 루프 모양은 같지만 합치지 않았습니다. `ToLongFunction` / `ObjLongConsumer` 를 받는 제네릭 메서드로 바꾸면 중복 10줄은 사라지지만, "우선순위 순으로 차감한다"와 "사용된 순서대로 되돌린다"가 둘 다 읽히지 않게 됩니다.
-
----
-
-## 11. 한계와 개선 방향
-
-- **H2 전용 문법이 한 군데 있습니다.** 사용자 락 행 생성이 `merge into user_point_lock ... key (user_id)` 입니다. MySQL 로 옮기면 `insert ... on duplicate key update user_id = user_id` 로 바꾸면 되고, 바꿀 곳은 `UserPointLockRepository.upsert` 한 곳뿐입니다. dialect 별 구현을 미리 만들어두는 건 과제 환경(H2)에서 검증할 수 없는 코드를 남기는 일이라 하지 않았습니다.
-- **더 중요한 건 락 동작 차이입니다.** H2 의 `SELECT ... FOR UPDATE` 와 MySQL 의 갭 락 동작이 달라 **지금 통과하는 동시성 테스트가 MySQL 에서 같은 결과를 보장하지 않습니다.** 이관 시 MySQL Testcontainer 로 같은 테스트를 다시 돌려야 합니다.
-- **스키마 마이그레이션 도구를 넣지 않았습니다.** 인메모리 H2 로 매번 새로 만드는 과제라 `schema.sql` 한 장이면 충분하고, Flyway 를 넣으면 리뷰어가 스키마를 보려고 마이그레이션 폴더를 뒤져야 합니다. 실서비스라면 Flyway 로 관리하고, 컬럼 추가는 nullable 로 추가 → 배포로 채우기 → `not null` 로 조이기 세 단계로 나눠야 합니다. 배포 중 구버전이 그 컬럼을 모르는 순간이 있기 때문입니다.
-- **관리자 API 에 인증이 없습니다.** API 키 한 겹은 실제 보안이 아니면서 리뷰어가 헤더를 알아야 admin API 를 호출할 수 있게 만들 뿐이라 넣지 않았습니다. 실서비스라면 관리자 API 는 내부망에 두고 게이트웨이/mTLS/IAM 으로 막은 뒤, 조작자가 누구인지까지 감사 로그에 남겨야 합니다. 사용자 API 의 `userId` 도 지금은 요청 본문으로 받는데 토큰에서 꺼내야 맞습니다.
-- **만료 배치가 단일 인스턴스 가정입니다.** 여러 인스턴스에서 동시에 돌면 같은 적립분을 두고 락 경합만 늘고, 배포 중에는 구·신버전이 겹쳐 돕니다. 실서비스라면 DB 행 선점이나 리더 선출로 하나만 돌게 해야 합니다. 과제 범위에서는 인스턴스가 하나뿐이라 넣지 않았습니다.
-- **데이터 수명 정책이 없습니다.** `point_transaction` / `point_usage` 는 무한히 쌓입니다. 오래된 이력은 S3 + Athena 로 아카이빙하고 원장만 남기는 편이 맞습니다.
-- **잔액 조회가 매번 합산입니다.** 적립분이 수만 건까지 쌓이면 스냅샷 테이블이 필요합니다 ([6-1](#6-1-잔액을-컬럼으로-저장하지-않는다)).
-- **멱등성 키에 요청 본문 해시를 함께 저장하지 않습니다.** 같은 `requestKey` 에 다른 금액이 오면 최초 결과를 반환합니다. 엄격히는 422 로 거절해야 맞습니다.
-- **지표를 내보내지 않습니다.** 감사 로그로 사후 추적은 되지만, 락 대기 시간·배치 지연·만료 적체 같은 값을 지표로 노출하지 않습니다. 실서비스라면 Micrometer 로 노출하고 그중 **만료 적체(만료 시각이 지났는데 미처리인 적립분 수)** 에 경보를 걸어야 합니다 — 배치가 밀리면 사용자가 이미 만료된 포인트를 계속 쓰게 되기 때문입니다.
+설계 판단의 배경과 알려진 한계는 [`docs/design.md`](docs/design.md) 에 정리했습니다.
