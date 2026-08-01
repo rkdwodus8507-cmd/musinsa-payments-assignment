@@ -19,8 +19,6 @@ import com.musinsa.payments.point.service.dto.EarnResult;
 import com.musinsa.payments.point.service.dto.UseCancelResult;
 import com.musinsa.payments.point.service.dto.UseCommand;
 import com.musinsa.payments.point.service.dto.UseResult;
-import com.musinsa.payments.point.support.batch.BatchLockRepository;
-import com.musinsa.payments.point.support.batch.BatchLockStore;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -83,9 +81,6 @@ public abstract class IntegrationTestSupport {
     @Autowired
     protected PointPolicyRepository policyRepository;
 
-    @Autowired
-    protected BatchLockRepository batchLockRepository;
-
     @BeforeEach
     protected void resetState() {
         cancellationRepository.deleteAllInBatch();
@@ -94,7 +89,6 @@ public abstract class IntegrationTestSupport {
         transactionRepository.deleteAllInBatch();
         lockRepository.deleteAllInBatch();
         policyRepository.deleteAllInBatch();
-        batchLockRepository.releaseAll(BatchLockStore.RELEASED_AT);
         clock.reset();
         policyService.initializeIfAbsent();
     }

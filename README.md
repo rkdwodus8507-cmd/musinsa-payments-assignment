@@ -90,7 +90,6 @@ java -jar build/libs/free-point-system-1.0.0.jar --spring.profiles.active=local 
 | `point_usage_cancellation` | 사용취소 상세. 어느 적립분으로 돌아갔는지, 만료로 새로 적립했는지 기록 |
 | `user_point_lock` | **잔액 컬럼 없음.** 사용자 단위 락(`SELECT ... FOR UPDATE`) 대상으로만 존재 |
 | `point_policy` | 단일 행. 런타임에 변경 가능한 정책값 |
-| `batch_lock` | 만료 배치를 인스턴스 하나만 돌리기 위한 선점 행 ([6-2](#6-2-잔액을-바꾸는-모든-경로가-같은-락을-잡는다)) |
 
 `earned_point.status` 는 `AVAILABLE` / `EXPIRED` / `CANCELED` 3가지입니다. 잔액이 0이 되는 것은 상태 전이가 아니라 `remaining_amount` 값 변화로만 표현해, 상태 머신을 단순하게 유지했습니다.
 
@@ -147,8 +146,6 @@ userPointLocker.lock(userId);   // SELECT ... FOR UPDATE
 ```
 
 그래서 배치를 사용자 단위로 돌립니다. 한 사용자를 처리하면 그 사용자의 만료 대상이 사라지므로 재조회가 비면 끝납니다. 사용자당 독립 트랜잭션이라 중간에 실패해도 이어서 재개되고 락 점유도 짧습니다.
-
-배치 자체는 `batch_lock` 행을 조건부 UPDATE 로 선점해 **인스턴스 하나만** 돕니다. TTL(기본 10분)이 있어 인스턴스가 죽어도 다음 실행이 회수합니다 — 없으면 만료가 영원히 멈춥니다.
 
 > 락 행이 없는 최초 요청은 `MERGE INTO user_point_lock ... KEY(user_id)` 로 만듭니다. 처음엔 `REQUIRES_NEW` 중첩 트랜잭션을 썼는데, 요청 하나가 커넥션 2개를 잡아 동시 요청이 풀 크기를 넘으면 교착에 빠졌습니다. 동시성 테스트에서 드러나 upsert 로 교체했습니다. MySQL 로 옮기면 이 한 줄만 `INSERT ... ON DUPLICATE KEY UPDATE` 로 바꾸면 됩니다.
 
@@ -350,7 +347,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 ./gradlew test
 ```
 
-총 **107개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
+총 **104개 테스트, 전부 통과**합니다. 스프링을 띄우는 테스트와 띄우지 않는 테스트를 나눴습니다.
 
 ### 단위 테스트 (스프링 없음, 40개)
 
@@ -363,7 +360,7 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 | `PointUsageTest` | 취소 가능 금액, 부분취소 누적 | 0.00s |
 | `PointTransactionTest` | 거래 종류별 생성 규칙, pointKey 발급 | 0.00s |
 
-### 통합 테스트 (스프링 컨텍스트 1개 공유, 67개)
+### 통합 테스트 (스프링 컨텍스트 1개 공유, 64개)
 
 | 테스트 | 내용 |
 |---|---|
@@ -379,7 +376,6 @@ curl -X POST http://localhost:8080/api/v1/points/use \
 | `PointAuditLogTest` | 잔액이 바뀐 거래만 감사 로그에 남는지 (로그 어펜더로 검증) |
 | `PointExpirationServiceTest` | 만료 배치가 사용자 락을 잡는지, 다중 사용자 처리와 종료 |
 | `PointBalanceQueryTest` | 잔액 조회가 전체 적립분을 읽지 않는지 (Hibernate 통계로 실측) |
-| `PointBatchLockTest` | 배치 단일 실행 보장 — 선점 / 반납 / TTL 회수 |
 
 **컨텍스트는 1개만 뜹니다.** 통합 테스트 전부가 `IntegrationTestSupport` 를 상속하고 설정이 같아 스프링 테스트가 캐싱합니다.
 
@@ -461,6 +457,7 @@ src/main/java/com/musinsa/payments/point/
 - **더 중요한 건 락 동작 차이입니다.** H2 의 `SELECT ... FOR UPDATE` 와 MySQL 의 갭 락 동작이 달라 **지금 통과하는 동시성 테스트가 MySQL 에서 같은 결과를 보장하지 않습니다.** 이관 시 MySQL Testcontainer 로 같은 테스트를 다시 돌려야 합니다.
 - **스키마 마이그레이션 도구를 넣지 않았습니다.** 인메모리 H2 로 매번 새로 만드는 과제라 `schema.sql` 한 장이면 충분하고, Flyway 를 넣으면 리뷰어가 스키마를 보려고 마이그레이션 폴더를 뒤져야 합니다. 실서비스라면 Flyway 로 관리하고, 컬럼 추가는 nullable 로 추가 → 배포로 채우기 → `not null` 로 조이기 세 단계로 나눠야 합니다. 배포 중 구버전이 그 컬럼을 모르는 순간이 있기 때문입니다.
 - **관리자 API 에 인증이 없습니다.** API 키 한 겹은 실제 보안이 아니면서 리뷰어가 헤더를 알아야 admin API 를 호출할 수 있게 만들 뿐이라 넣지 않았습니다. 실서비스라면 관리자 API 는 내부망에 두고 게이트웨이/mTLS/IAM 으로 막은 뒤, 조작자가 누구인지까지 감사 로그에 남겨야 합니다. 사용자 API 의 `userId` 도 지금은 요청 본문으로 받는데 토큰에서 꺼내야 맞습니다.
+- **만료 배치가 단일 인스턴스 가정입니다.** 여러 인스턴스에서 동시에 돌면 같은 적립분을 두고 락 경합만 늘고, 배포 중에는 구·신버전이 겹쳐 돕니다. 실서비스라면 DB 행 선점이나 리더 선출로 하나만 돌게 해야 합니다. 과제 범위에서는 인스턴스가 하나뿐이라 넣지 않았습니다.
 - **데이터 수명 정책이 없습니다.** `point_transaction` / `point_usage` 는 무한히 쌓입니다. 오래된 이력은 S3 + Athena 로 아카이빙하고 원장만 남기는 편이 맞습니다.
 - **잔액 조회가 매번 합산입니다.** 적립분이 수만 건까지 쌓이면 스냅샷 테이블이 필요합니다 ([6-1](#6-1-잔액을-컬럼으로-저장하지-않는다)).
 - **멱등성 키에 요청 본문 해시를 함께 저장하지 않습니다.** 같은 `requestKey` 에 다른 금액이 오면 최초 결과를 반환합니다. 엄격히는 422 로 거절해야 맞습니다.

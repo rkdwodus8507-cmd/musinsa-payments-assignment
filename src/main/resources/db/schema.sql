@@ -4,7 +4,6 @@ drop table if exists earned_point;
 drop table if exists point_transaction;
 drop table if exists user_point_lock;
 drop table if exists point_policy;
-drop table if exists batch_lock;
 
 create table point_policy
 (
@@ -95,14 +94,3 @@ create table point_usage_cancellation
 
 create index idx_point_usage_cancellation_transaction on point_usage_cancellation (cancel_transaction_id, id);
 
-create table batch_lock
-(
-    name        varchar(64) not null,
-    holder      varchar(64) not null,
-    acquired_at timestamp   not null,
-    expires_at  timestamp   not null,
-    primary key (name)
-);
-
-insert into batch_lock (name, holder, acquired_at, expires_at)
-values ('point-expiration', 'none', timestamp '1970-01-01 00:00:00', timestamp '1970-01-01 00:00:00');

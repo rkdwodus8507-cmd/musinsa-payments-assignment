@@ -29,7 +29,6 @@ point:
     enabled: true
     cron: "0 0 4 * * *"
     chunk-size: 500
-    lock-ttl: PT10M
 
 springdoc:
   swagger-ui:

@@ -4,7 +4,6 @@ import com.musinsa.payments.point.config.PointExpirationProperties;
 import com.musinsa.payments.point.domain.EarnedPointStatus;
 import com.musinsa.payments.point.repository.EarnedPointRepository;
 import com.musinsa.payments.point.service.dto.ExpirationResult;
-import com.musinsa.payments.point.support.batch.BatchLockManager;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,24 +15,13 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class PointExpirationService {
 
-    public static final String EXPIRATION_LOCK = "point-expiration";
-
     private final EarnedPointRepository earnedPointRepository;
     private final ExpiredPointMarker expiredPointMarker;
     private final PointExpirationProperties expirationProperties;
     private final PointAuditRecorder auditRecorder;
-    private final BatchLockManager batchLockManager;
     private final Clock clock;
 
     public ExpirationResult expireAll() {
-        return batchLockManager.runExclusively(
-                EXPIRATION_LOCK,
-                expirationProperties.getLockTtl(),
-                this::expireEveryOwnerAndRecord,
-                () -> new ExpirationResult(0, 0));
-    }
-
-    private ExpirationResult expireEveryOwnerAndRecord() {
         LocalDateTime baseTime = LocalDateTime.now(clock);
         ExpirationResult expired = expireEveryOwner(baseTime);
 
