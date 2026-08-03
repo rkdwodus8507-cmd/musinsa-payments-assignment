@@ -10,19 +10,14 @@ import com.musinsa.payments.point.repository.PointTransactionRepository;
 import com.musinsa.payments.point.repository.PointUsageCancellationRepository;
 import com.musinsa.payments.point.repository.PointUsageRepository;
 import com.musinsa.payments.point.service.dto.CancelUseCommand;
-import com.musinsa.payments.point.service.dto.CanceledPointDetail;
 import com.musinsa.payments.point.service.dto.UseCancelResult;
 import com.musinsa.payments.point.service.dto.UseCommand;
 import com.musinsa.payments.point.service.dto.UseResult;
-import com.musinsa.payments.point.service.dto.UsedPointDetail;
 import com.musinsa.payments.point.support.error.ErrorCode;
 import com.musinsa.payments.point.support.error.PointException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +36,7 @@ public class PointUseService {
     private final PointTransactionReader transactionReader;
     private final PointIdempotencyGuard idempotencyGuard;
     private final PointAuditRecorder auditRecorder;
+    private final PointUseResultAssembler resultAssembler;
     private final Clock clock;
 
     @Transactional
@@ -48,7 +44,7 @@ public class PointUseService {
         userPointLocker.lock(command.getUserId());
 
         return idempotencyGuard.runOnce(command.getUserId(), command.getRequestKey(), PointTransactionType.USE,
-                this::toUseResult,
+                resultAssembler::toUseResult,
                 () -> deductPoints(command));
     }
 
@@ -58,7 +54,7 @@ public class PointUseService {
         userPointLocker.lock(useTransaction.getUserId());
 
         return idempotencyGuard.runOnce(useTransaction.getUserId(), command.getRequestKey(), PointTransactionType.USE_CANCEL,
-                this::toUseCancelResult,
+                resultAssembler::toUseCancelResult,
                 () -> restoreUsedPoints(useTransaction, command));
     }
 
@@ -71,7 +67,7 @@ public class PointUseService {
                 command.getUserId(), command.getAmount(), command.getOrderId(), command.getRequestKey(), now));
         deductInPriorityOrder(sources, useTransaction, now);
 
-        return audited(useTransaction, toUseResult(useTransaction));
+        return audited(useTransaction, resultAssembler.toUseResult(useTransaction));
     }
 
     private void deductInPriorityOrder(List<EarnedPoint> sources, PointTransaction useTransaction, LocalDateTime now) {
@@ -89,14 +85,14 @@ public class PointUseService {
 
     private UseCancelResult restoreUsedPoints(PointTransaction useTransaction, CancelUseCommand command) {
         LocalDateTime now = LocalDateTime.now(clock);
-        List<PointUsage> usages = usagesOf(useTransaction);
+        List<PointUsage> usages = usageRepository.findByUseTransactionIdOrderByIdAsc(useTransaction.getId());
         validateCancelable(usages, command.getAmount());
 
         PointTransaction cancelTransaction = transactionRepository.save(PointTransaction.useCancel(
                 useTransaction, command.getAmount(), command.getRequestKey(), now));
         restoreInUsedOrder(usages, cancelTransaction, now);
 
-        return audited(cancelTransaction, toUseCancelResult(cancelTransaction));
+        return audited(cancelTransaction, resultAssembler.toUseCancelResult(cancelTransaction));
     }
 
     private void restoreInUsedOrder(List<PointUsage> usages, PointTransaction cancelTransaction, LocalDateTime now) {
@@ -152,30 +148,6 @@ public class PointUseService {
         return result;
     }
 
-    private UseResult toUseResult(PointTransaction useTransaction) {
-        return new UseResult(
-                useTransaction.getPointKey(),
-                useTransaction.getUserId(),
-                useTransaction.getOrderId(),
-                useTransaction.getAmount(),
-                earnedPointReader.balanceOf(useTransaction.getUserId()),
-                toUsedDetails(usagesOf(useTransaction)));
-    }
-
-    private UseCancelResult toUseCancelResult(PointTransaction cancelTransaction) {
-        PointTransaction useTransaction = transactionReader.byId(cancelTransaction.getRelatedTransactionId());
-
-        return new UseCancelResult(
-                cancelTransaction.getPointKey(),
-                useTransaction.getPointKey(),
-                cancelTransaction.getUserId(),
-                cancelTransaction.getOrderId(),
-                cancelTransaction.getAmount(),
-                totalCancelableOf(usagesOf(useTransaction)),
-                earnedPointReader.balanceOf(cancelTransaction.getUserId()),
-                toCanceledDetails(cancelTransaction));
-    }
-
     private void validateEnoughToUse(List<EarnedPoint> sources, long amount) {
         long usable = sources.stream().mapToLong(EarnedPoint::getRemainingAmount).sum();
         if (usable < amount) {
@@ -185,67 +157,11 @@ public class PointUseService {
     }
 
     private void validateCancelable(List<PointUsage> usages, long amount) {
-        long cancelable = totalCancelableOf(usages);
+        long cancelable = usages.stream().mapToLong(PointUsage::cancelableAmount).sum();
         if (amount > cancelable) {
             throw PointException.of(ErrorCode.USE_CANCEL_AMOUNT_EXCEEDED,
                     "취소 가능: %d, 요청: %d".formatted(cancelable, amount));
         }
-    }
-
-    private List<UsedPointDetail> toUsedDetails(List<PointUsage> usages) {
-        EarnedPointSources sources = earnedPointReader.sourcesOf(usages);
-
-        return usages.stream()
-                .map(usage -> new UsedPointDetail(
-                        sources.earnPointKeyOf(usage),
-                        usage.getAmount(),
-                        sources.of(usage).isManual(),
-                        sources.of(usage).getExpireAt()))
-                .toList();
-    }
-
-    private List<CanceledPointDetail> toCanceledDetails(PointTransaction cancelTransaction) {
-        List<PointUsageCancellation> cancellations =
-                cancellationRepository.findByCancelTransactionIdOrderByIdAsc(cancelTransaction.getId());
-        Map<Long, EarnedPoint> earnedPoints = earnedPointReader.byIds(referencedEarnedPointIds(cancellations));
-        Map<Long, String> earnPointKeys = transactionReader.earnPointKeysByEarnedPointId(earnedPoints.values());
-
-        return cancellations.stream()
-                .map(cancellation -> toCanceledDetail(cancellation, earnedPoints, earnPointKeys))
-                .toList();
-    }
-
-    private CanceledPointDetail toCanceledDetail(PointUsageCancellation cancellation,
-                                                 Map<Long, EarnedPoint> earnedPoints,
-                                                 Map<Long, String> earnPointKeys) {
-        EarnedPoint source = earnedPoints.get(cancellation.getSourceEarnedPointId());
-        EarnedPoint reissued = cancellation.isReissued()
-                ? earnedPoints.get(cancellation.getReissuedEarnedPointId())
-                : null;
-
-        return new CanceledPointDetail(
-                earnPointKeys.get(source.getId()),
-                cancellation.getAmount(),
-                cancellation.isReissued(),
-                reissued == null ? null : earnPointKeys.get(reissued.getId()),
-                reissued == null ? source.getExpireAt() : reissued.getExpireAt());
-    }
-
-    private List<Long> referencedEarnedPointIds(List<PointUsageCancellation> cancellations) {
-        return cancellations.stream()
-                .flatMap(cancellation -> Stream.of(
-                        cancellation.getSourceEarnedPointId(), cancellation.getReissuedEarnedPointId()))
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-    }
-
-    private List<PointUsage> usagesOf(PointTransaction useTransaction) {
-        return usageRepository.findByUseTransactionIdOrderByIdAsc(useTransaction.getId());
-    }
-
-    private long totalCancelableOf(List<PointUsage> usages) {
-        return usages.stream().mapToLong(PointUsage::cancelableAmount).sum();
     }
 
 }
